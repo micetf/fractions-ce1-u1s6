@@ -25,14 +25,14 @@
  * @type {Object.<number, string>}
  */
 export const FNAME = {
-  2:  'un demi',
-  3:  'un tiers',
-  4:  'un quart',
-  5:  'un cinquième',
-  6:  'un sixième',
-  8:  'un huitième',
-  9:  'un neuvième',
-  10: 'un dixième',
+    2: "un demi",
+    3: "un tiers",
+    4: "un quart",
+    5: "un cinquième",
+    6: "un sixième",
+    8: "un huitième",
+    9: "un neuvième",
+    10: "un dixième",
 };
 
 /**
@@ -42,10 +42,11 @@ export const FNAME = {
  * @returns {string}
  */
 export function ruleMsg(n) {
-  if (n === 2) return 'Quand il faut 2 parts égales pour faire le tout, on dit «un demi».';
-  if (n === 3) return 'Quand il faut 3 parts égales, on dit «un tiers».';
-  if (n === 4) return 'Quand il faut 4 parts égales, on dit «un quart».';
-  return `Quand il faut ${n} parts égales, on dit «un ${n}-ième».`;
+    if (n === 2)
+        return "Quand il faut 2 parts égales pour faire le tout, on dit «un demi».";
+    if (n === 3) return "Quand il faut 3 parts égales, on dit «un tiers».";
+    if (n === 4) return "Quand il faut 4 parts égales, on dit «un quart».";
+    return `Quand il faut ${n} parts égales, on dit «un ${n}-ième».`;
 }
 
 /**
@@ -56,8 +57,18 @@ export function ruleMsg(n) {
  * @param {string} t   - Nom du tout
  * @returns {string}
  */
-export const okCountMsg = (n, p, t) =>
-  `Il faut bien ${n} ${p} pour remplir le ${t}. Maintenant, nomme la fraction.`;
+export const okCountMsg = (n, p, t) => {
+    const pluriel = (s) => {
+        return s
+            .split(" ")
+            .map((t) => t + "s")
+            .join(" ");
+    };
+    const genre = (s) => {
+        return s.includes("carré") || s.includes("disque") ? "le" : "la";
+    };
+    return `Il faut bien ${n} ${n > 1 ? pluriel(p) : p} pour remplir ${genre(t)} ${t}. Maintenant, nomme la fraction.`;
+};
 
 /**
  * Feedback positif après un nommage réussi.
@@ -68,8 +79,18 @@ export const okCountMsg = (n, p, t) =>
  * @param {string} f   - Nom de la fraction attendue
  * @returns {string}
  */
-export const okNameMsg = (n, p, t, f) =>
-  `Il faut ${n} ${p} pour faire le ${t} → c'est «${f}».`;
+export const okNameMsg = (n, p, t, f) => {
+    const pluriel = (s) => {
+        return s
+            .split(" ")
+            .map((t) => t + "s")
+            .join(" ");
+    };
+    const genre = (s) => {
+        return s.includes("carré") || s.includes("disque") ? "le" : "la";
+    };
+    return `Il faut ${n} ${n > 1 ? pluriel(p) : p} pour faire ${genre(t)} ${t} → c'est «${f}».`;
+};
 
 /**
  * Feedback d'erreur : pas assez de pièces placées.
@@ -79,7 +100,7 @@ export const okNameMsg = (n, p, t, f) =>
  * @returns {string}
  */
 export const errCountFew = (placed, n) =>
-  `Il reste de la place. Tu en as ${placed}, il en faut ${n}. Continue à en ajouter.`;
+    `Il reste de la place. Tu en as ${placed}, il en faut ${n}. Continue à en ajouter.`;
 
 /**
  * Feedback d'erreur : trop de pièces placées.
@@ -89,7 +110,7 @@ export const errCountFew = (placed, n) =>
  * @returns {string}
  */
 export const errCountMany = (placed, n) =>
-  `Tu en as ${placed} mais le tout ne peut en contenir que ${n}. Retire-en.`;
+    `Tu en as ${placed} mais le tout ne peut en contenir que ${n}. Retire-en.`;
 
 /**
  * Première erreur de nommage — rappel du contexte numérique.
@@ -99,7 +120,7 @@ export const errCountMany = (placed, n) =>
  * @returns {string}
  */
 export const errName1 = (n, p) =>
-  `Tu as compté ${n} ${p}. Quelle fraction contient le nombre ${n} ?`;
+    `Tu as compté ${n} ${p}. Quelle fraction contient le nombre ${n} ?`;
 
 /**
  * Deuxième erreur de nommage — énonce la règle explicitement.

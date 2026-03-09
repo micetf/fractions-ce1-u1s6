@@ -4,30 +4,25 @@
  * @description
  * Activité en deux phases enchaînées pour chaque situation :
  *
- * 1. **Phase `count`** — L'élève ajoute des pièces fantômes dans le carré
- *    jusqu'à ce qu'il soit entièrement rempli, puis valide.
+ * 1. **Phase `count`** — Le carré commence vide. L'élève ajoute des pièces une
+ *    à une jusqu'à le remplir entièrement, puis valide. Une pièce de référence
+ *    (toujours visible) rappelle la pièce à manipuler.
  *
- * 2. **Phase `name`**  — L'élève choisit parmi 4 options le nom de la
- *    fraction que représente la pièce active.
+ * 2. **Phase `name`**  — L'élève choisit parmi 4 options le nom de la fraction
+ *    que représente la pièce de référence.
  *
  * ────────────────────────────────────────────────────────────────
- * Machine d'état interne
+ * Modèle de remplissage
  * ────────────────────────────────────────────────────────────────
- *
- *   INIT ──► count ──[validateCount OK]──► name ──[validateName OK]──► NEXT_SIT
- *              │                                         │
- *              └──[validateCount ERR]──► (retry)         └──[validateName ERR]──► (retry)
+ * `placed` va de 0 (carré vide) à s.n (carré plein).
+ * Ordre : position « active » en premier, puis chaque ghost.
+ * Tenter d'ajouter quand placed === s.n → FullModal.
  *
  * ────────────────────────────────────────────────────────────────
  * Scoring
  * ────────────────────────────────────────────────────────────────
- * +1 point par phase réussie (max 2 points/situation = 10 points/atelier).
- * Le score est incrémenté dès la réussite, pas à la fin.
+ * +1 point par phase réussie (max 2 points/situation = 10 points).
  *
- * ────────────────────────────────────────────────────────────────
- * Journalisation
- * ────────────────────────────────────────────────────────────────
- * Tous les événements sont émis via `props.log` pour le Dashboard.
  * @see useEventLog
  */
 
@@ -46,41 +41,38 @@ import {
 import Btn from "../ui/Btn.jsx";
 import Bubble from "../ui/Bubble.jsx";
 import ProgDots from "../ui/ProgDots.jsx";
-import CountBlocks from "../ui/CountBlocks.jsx";
 import DoneScreen from "../ui/DoneScreen.jsx";
+import FullModal from "../ui/FullModal.jsx";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
-/** Couleur thématique de l'atelier Tangram */
 const COLOR = "#2563EB";
-
-/** Score maximal possible (2 points × nombre de situations) */
 const MAX_SCORE = TG.length * 2;
 
-// ─── Composant SVG interne ─────────────────────────────────────────────────────
+// ─── TangramSVG ────────────────────────────────────────────────────────────────
 
 /**
- * Représentation SVG du carré Tangram avec pièce active et fantômes.
+ * Carré Tangram progressivement rempli.
  *
- * @param {Object}  props
- * @param {Object}  props.situation  - Données de la situation en cours
- * @param {number}  props.placed     - Nombre de pièces fantômes placées
- * @param {boolean} props.overflow   - Vrai si placed > ghosts.length
+ * placed=0 → carré vide (fantômes très atténués).
+ * placed=s.n → carré entièrement rempli.
+ * Ordre de remplissage : [active, ...ghosts].
  *
- * @returns {JSX.Element}
+ * @param {{ situation: Object, placed: number }} props
  */
-function TangramSVG({ situation: s, placed, overflow }) {
+function TangramSVG({ situation: s, placed, size = 200 }) {
+    const allPieces = [s.active, ...s.ghosts]; // longueur = s.n
+
     return (
         <svg
             viewBox="0 0 200 200"
-            aria-label={`Carré Tangram avec ${placed + 1} pièce${placed > 0 ? "s" : ""}`}
+            aria-label={`Carré Tangram — ${placed} pièce${placed > 1 ? "s" : ""} posée${placed > 1 ? "s" : ""}`}
             style={{
-                width: "200px",
-                height: "200px",
+                width: `${size}px`,
+                height: `${size}px`,
                 filter: "drop-shadow(0 4px 14px rgba(0,0,0,.12))",
             }}
         >
-            {/* Fond du carré */}
             <rect
                 x="10"
                 y="10"
@@ -90,48 +82,17 @@ function TangramSVG({ situation: s, placed, overflow }) {
                 rx="2"
             />
 
-            {/* Pièces fantômes (emplacements à remplir) */}
-            {s.ghosts.map((pts, i) => (
+            {allPieces.map((pts, i) => (
                 <polygon
                     key={i}
                     points={pts}
-                    fill={
-                        overflow && i === s.ghosts.length - 1
-                            ? "#FCA5A5"
-                            : s.ghostC
-                    }
-                    opacity={
-                        i < placed
-                            ? overflow && i >= s.ghosts.length - 1
-                                ? 0.55
-                                : 0.85
-                            : 0.1
-                    }
+                    fill={i < placed ? s.color : s.ghostC}
+                    opacity={i < placed ? 0.85 : 0.12}
                     stroke="white"
                     strokeWidth="1.5"
                 />
             ))}
 
-            {/* Surimpression rouge si débordement */}
-            {overflow && (
-                <polygon
-                    points={s.ghosts[0]}
-                    fill="#EF4444"
-                    opacity={0.4}
-                    stroke="#FCA5A5"
-                    strokeWidth="2"
-                />
-            )}
-
-            {/* Pièce active (toujours visible, colorée) */}
-            <polygon
-                points={s.active}
-                fill={s.color}
-                stroke="white"
-                strokeWidth="2"
-            />
-
-            {/* Bordure du carré */}
             <rect
                 x="10"
                 y="10"
@@ -154,61 +115,41 @@ TangramSVG.propTypes = {
         ghosts: PropTypes.arrayOf(PropTypes.string).isRequired,
     }).isRequired,
     placed: PropTypes.number.isRequired,
-    overflow: PropTypes.bool.isRequired,
+    size: PropTypes.number,
 };
 
-// ─── Phase comptage ─────────────────────────────────────────────────────────────
+// ─── PhaseCount ────────────────────────────────────────────────────────────────
 
 /**
- * Interface de la phase de comptage : ajout/retrait de pièces + validation.
+ * Interface de la phase de comptage.
  *
  * @param {Object}   props
- * @param {Object}   props.situation    - Données de la situation
- * @param {number}   props.placed       - Pièces actuellement placées
- * @param {boolean}  props.overflow     - Débordement détecté
- * @param {Object}   props.feedback     - Objet { type, msg } ou null
- * @param {Function} props.onAdd        - Ajouter une pièce
- * @param {Function} props.onRemove     - Retirer une pièce
- * @param {Function} props.onValidate   - Valider le comptage
- *
- * @returns {JSX.Element}
+ * @param {Object}   props.situation  - Données de la situation
+ * @param {number}   props.placed     - Pièces placées (0..s.n)
+ * @param {Object}   props.feedback   - { type, msg } | null
+ * @param {Function} props.onContinue - Transition vers la phase name
+ * @param {Function} props.onAdd      - Ajouter une pièce
+ * @param {Function} props.onRemove   - Retirer une pièce
+ * @param {Function} props.onValidate - Valider le comptage
  */
 function PhaseCount({
     situation: s,
     placed,
-    overflow,
     feedback,
+    onContinue,
     onAdd,
     onRemove,
     onValidate,
 }) {
-    const blockColor = overflow ? "#EF4444" : s.color;
-
     return (
         <div className="flex flex-col gap-3">
-            {/* Compteur visuel */}
-            <div className="bg-slate-50 rounded-2xl p-3 text-center">
-                <p className="text-sm font-bold text-slate-500 mb-1">
-                    {placed + 1} {s.pieceLabel}
-                    {placed > 0 ? "s" : ""}
-                    {overflow ? " ⚠ ça déborde !" : ""}
-                </p>
-                <CountBlocks
-                    placed={placed + 1}
-                    max={s.n + (overflow ? 1 : 0)}
-                    color={blockColor}
-                />
-            </div>
-
-            {/* Boutons d'action */}
             <div className="flex gap-3 justify-center">
                 <button
                     onClick={onAdd}
-                    disabled={overflow}
                     aria-label="Ajouter une pièce"
                     className="btn-add flex-1 py-4 rounded-2xl text-2xl font-bold text-white
-                     shadow-md disabled:opacity-40 touch-manipulation"
-                    style={{ background: overflow ? "#9CA3AF" : s.color }}
+                     shadow-md touch-manipulation"
+                    style={{ background: s.color }}
                 >
                     ➕ Ajouter
                 </button>
@@ -223,11 +164,15 @@ function PhaseCount({
                 </button>
             </div>
 
-            {/* Feedback conditionnel */}
-            {feedback && <Bubble type={feedback.type} msg={feedback.msg} />}
+            {feedback && (
+                <Bubble
+                    type={feedback.type}
+                    msg={feedback.msg}
+                    onContinue={feedback.type === "ok" ? onContinue : null}
+                />
+            )}
 
-            {/* Bouton de validation (masqué en cas de débordement) */}
-            {!overflow && (
+            {feedback?.type !== "ok" && (
                 <button
                     onClick={onValidate}
                     className="py-4 rounded-2xl text-lg font-bold text-white shadow-md
@@ -243,51 +188,49 @@ function PhaseCount({
 
 PhaseCount.propTypes = {
     situation: PropTypes.shape({
-        pieceLabel: PropTypes.string.isRequired,
         color: PropTypes.string.isRequired,
         tout: PropTypes.string.isRequired,
-        n: PropTypes.number.isRequired,
     }).isRequired,
     placed: PropTypes.number.isRequired,
-    overflow: PropTypes.bool.isRequired,
     feedback: PropTypes.shape({
         type: PropTypes.oneOf(["ok", "err", "hint"]).isRequired,
         msg: PropTypes.string.isRequired,
     }),
+    onContinue: PropTypes.func.isRequired,
     onAdd: PropTypes.func.isRequired,
     onRemove: PropTypes.func.isRequired,
     onValidate: PropTypes.func.isRequired,
 };
 
-PhaseCount.defaultProps = {
-    feedback: null,
-};
+PhaseCount.defaultProps = { feedback: null };
 
-// ─── Phase nommage ──────────────────────────────────────────────────────────────
+// ─── PhaseName ─────────────────────────────────────────────────────────────────
 
 /**
- * Interface de la phase de nommage : sélection parmi 4 options de fraction.
+ * Interface de la phase de nommage.
  *
  * @param {Object}   props
  * @param {Object}   props.situation  - Données de la situation
- * @param {Object}   props.feedback   - Objet { type, msg } ou null
+ * @param {Object}   props.feedback   - { type, msg } | null
+ * @param {Function} props.onContinue - Avancement à la situation suivante
  * @param {Function} props.onSelect   - Callback(option: string)
- *
- * @returns {JSX.Element}
  */
-function PhaseName({ situation: s, feedback, onSelect }) {
+function PhaseName({ situation: s, feedback, onContinue, onSelect }) {
     return (
         <div className="flex flex-col gap-3">
-            {feedback && <Bubble type={feedback.type} msg={feedback.msg} />}
+            {feedback && (
+                <Bubble
+                    type={feedback.type}
+                    msg={feedback.msg}
+                    onContinue={feedback.type === "ok" ? onContinue : null}
+                />
+            )}
 
             <div className="flex flex-wrap gap-3 justify-center">
                 {s.fOpts.map((opt) => {
                     let v = "idle";
-                    if (feedback) {
-                        v =
-                            opt === s.answer && feedback.type === "ok"
-                                ? "ok"
-                                : "off";
+                    if (feedback && feedback.type === "ok") {
+                        v = opt === s.answer ? "ok" : "off";
                     }
                     return (
                         <Btn
@@ -312,12 +255,11 @@ PhaseName.propTypes = {
         type: PropTypes.oneOf(["ok", "err", "hint"]).isRequired,
         msg: PropTypes.string.isRequired,
     }),
+    onContinue: PropTypes.func.isRequired,
     onSelect: PropTypes.func.isRequired,
 };
 
-PhaseName.defaultProps = {
-    feedback: null,
-};
+PhaseName.defaultProps = { feedback: null };
 
 // ─── Composant principal ────────────────────────────────────────────────────────
 
@@ -325,31 +267,24 @@ PhaseName.defaultProps = {
  * Atelier Tangram — séquence de 5 situations de fractions du carré.
  *
  * @param {Object}   props
- * @param {Function} props.log - Émetteur d'événements pédagogiques (useEventLog)
- *
- * @returns {JSX.Element}
+ * @param {Function} props.log - Émetteur d'événements pédagogiques
  */
 export default function AtelierTangram({ log }) {
-    // ── État de la situation ──────────────────────────────────────────────────
     const [idx, setIdx] = useState(0);
     const [placed, setPlaced] = useState(0);
-    const [phase, setPhase] = useState("count"); // 'count' | 'name'
-    const [feedback, setFeedback] = useState(null); // { type, msg } | null
-    const [locked, setLocked] = useState(false); // verrou anti-double-clic
-
-    // ── Métriques de la situation ─────────────────────────────────────────────
+    const [phase, setPhase] = useState("count");
+    const [feedback, setFeedback] = useState(null);
+    const [locked, setLocked] = useState(false);
+    const [showFullModal, setShowFullModal] = useState(false);
     const [nameErr, setNameErr] = useState(0);
     const [score, setScore] = useState(0);
     const [done, setDone] = useState(false);
 
-    // ── Refs (pas de re-render nécessaire) ───────────────────────────────────
     const sitStart = useRef(Date.now());
     const countErrCount = useRef(0);
 
     const s = TG[idx];
-    const overflow = placed > s.ghosts.length;
 
-    // ── Initialisation à chaque nouvelle situation ────────────────────────────
     useEffect(() => {
         sitStart.current = Date.now();
         countErrCount.current = 0;
@@ -357,19 +292,18 @@ export default function AtelierTangram({ log }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [idx]);
 
-    // ── Réinitialisation complète de l'atelier ────────────────────────────────
     const reset = useCallback(() => {
         setIdx(0);
         setPlaced(0);
         setPhase("count");
         setFeedback(null);
         setLocked(false);
+        setShowFullModal(false);
         setNameErr(0);
         setScore(0);
         setDone(false);
     }, []);
 
-    // ── Passage à la situation suivante (ou fin d'atelier) ────────────────────
     const doAdvance = useCallback(
         (finalNameErr) => {
             const dur = Date.now() - sitStart.current;
@@ -388,7 +322,6 @@ export default function AtelierTangram({ log }) {
             });
 
             const next = idx + 1;
-
             if (next < TG.length) {
                 setIdx(next);
                 setPlaced(0);
@@ -399,7 +332,7 @@ export default function AtelierTangram({ log }) {
             } else {
                 setDone(true);
                 log("ATELIER_DONE", {
-                    totalScore: score + (isFullScore ? 0 : 0), // déjà incrémenté
+                    totalScore: score,
                     maxScore: MAX_SCORE,
                     durationMs: dur,
                 });
@@ -408,12 +341,17 @@ export default function AtelierTangram({ log }) {
         [idx, s, score, log]
     );
 
-    // ── Handlers phase COUNT ──────────────────────────────────────────────────
+    // ── Handlers COUNT ──────────────────────────────────────────────────────────
 
+    /** Ajouter : déclenche la modale si le carré est déjà plein. */
     const handleAdd = useCallback(() => {
-        if (!overflow) setPlaced((p) => p + 1);
+        if (placed >= s.n) {
+            setShowFullModal(true);
+        } else {
+            setPlaced((p) => p + 1);
+        }
         setFeedback(null);
-    }, [overflow]);
+    }, [placed, s.n]);
 
     const handleRemove = useCallback(() => {
         setPlaced((p) => Math.max(p - 1, 0));
@@ -421,46 +359,38 @@ export default function AtelierTangram({ log }) {
     }, []);
 
     const handleValidateCount = useCallback(() => {
-        // placed + 1 car la pièce active compte dans le total
-        const total = placed + 1;
-
-        if (total === s.n) {
+        if (placed === s.n) {
             setScore((sc) => sc + 1);
             log("COUNT_OK", { idx, countErrors: countErrCount.current });
             setFeedback({
                 type: "ok",
                 msg: okCountMsg(s.n, s.pieceLabel, s.tout),
             });
-            setTimeout(() => {
-                setPhase("name");
-                setFeedback(null);
-            }, 1800);
-        } else if (total < s.n) {
+        } else if (placed < s.n) {
             countErrCount.current++;
-            log("COUNT_ERR", { idx, placed: total, expected: s.n });
-            setFeedback({ type: "err", msg: errCountFew(total, s.n) });
+            log("COUNT_ERR", { idx, placed, expected: s.n });
+            setFeedback({ type: "err", msg: errCountFew(placed, s.n) });
         } else {
             countErrCount.current++;
-            log("COUNT_ERR", { idx, placed: total, expected: s.n });
-            setFeedback({ type: "err", msg: errCountMany(total, s.n) });
+            log("COUNT_ERR", { idx, placed, expected: s.n });
+            setFeedback({ type: "err", msg: errCountMany(placed, s.n) });
         }
     }, [placed, s, idx, log]);
 
-    // ── Handlers phase NAME ───────────────────────────────────────────────────
+    // ── Handlers NAME ────────────────────────────────────────────────────────────
 
     const handleSelectName = useCallback(
         (opt) => {
             if (locked) return;
-            setLocked(true);
 
             if (opt === s.answer) {
+                setLocked(true);
                 setScore((sc) => sc + 1);
                 log("NAME_OK", { idx, nameErrors: nameErr });
                 setFeedback({
                     type: "ok",
                     msg: okNameMsg(s.n, s.pieceLabel, s.tout, s.answer),
                 });
-                setTimeout(() => doAdvance(nameErr), 2000);
             } else {
                 const ne = nameErr + 1;
                 setNameErr(ne);
@@ -477,16 +407,23 @@ export default function AtelierTangram({ log }) {
                             ? errName1(s.n, `${s.pieceLabel}s`)
                             : errName2(s.n),
                 });
-                setTimeout(() => {
-                    setFeedback(null);
-                    setLocked(false);
-                }, 2200);
             }
         },
-        [locked, s, nameErr, idx, doAdvance, log]
+        [locked, s, nameErr, idx, log]
     );
 
-    // ── Rendu ─────────────────────────────────────────────────────────────────
+    // ── Callbacks de continuation ────────────────────────────────────────────────
+
+    const handleCountContinue = useCallback(() => {
+        setPhase("name");
+        setFeedback(null);
+    }, []);
+
+    const handleNameContinue = useCallback(() => {
+        doAdvance(nameErr);
+    }, [doAdvance, nameErr]);
+
+    // ── Rendu ────────────────────────────────────────────────────────────────────
 
     if (done) {
         return (
@@ -504,7 +441,7 @@ export default function AtelierTangram({ log }) {
 
     return (
         <div className="flex flex-col gap-4">
-            {/* En-tête : progression */}
+            {/* Progression */}
             <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                     {idx + 1}/{TG.length}
@@ -535,9 +472,50 @@ export default function AtelierTangram({ log }) {
                 )}
             </div>
 
-            {/* Visualisation SVG */}
-            <div className="flex justify-center">
-                <TangramSVG situation={s} placed={placed} overflow={overflow} />
+            {/* ── Visualisation : tout à couvrir + modèle de la part, même échelle ── */}
+            {/*
+        Les deux SVGs partagent viewBox="0 0 200 200" et size=150px CSS.
+        150 + 150 + gap ≈ 316px → tient sur un écran 375px.
+        La part est tournée de s.rot° autour du centre (100,100) pour briser
+        toute orientation prototypique. Le viewBox élargi "-20 -20 240 240"
+        sur le modèle évite le clipping des coins lors de la rotation.
+      */}
+            <div className="flex items-end justify-center gap-4">
+                {/* Le tout : carré à remplir progressivement */}
+                <div className="flex flex-col items-center gap-1">
+                    <TangramSVG situation={s} placed={placed} size={150} />
+                    <span className="text-xs font-semibold text-slate-400">
+                        le {s.tout}
+                    </span>
+                </div>
+
+                {/* Le modèle de la part : même taille CSS, rotation non-prototypique */}
+                <div className="flex flex-col items-center gap-1">
+                    <svg
+                        viewBox="-20 -20 240 240"
+                        aria-label={`Modèle : ${s.pieceLabel}`}
+                        style={{
+                            width: "150px",
+                            height: "150px",
+                            flexShrink: 0,
+                        }}
+                    >
+                        <polygon
+                            points={s.active}
+                            fill={s.color}
+                            opacity={0.9}
+                            stroke="white"
+                            strokeWidth="2"
+                            transform={`rotate(${s.rot}, 100, 100)`}
+                        />
+                    </svg>
+                    <span
+                        className="text-xs font-semibold"
+                        style={{ color: s.color }}
+                    >
+                        {s.pieceLabel}
+                    </span>
+                </div>
             </div>
 
             {/* Phase active */}
@@ -545,8 +523,8 @@ export default function AtelierTangram({ log }) {
                 <PhaseCount
                     situation={s}
                     placed={placed}
-                    overflow={overflow}
                     feedback={feedback}
+                    onContinue={handleCountContinue}
                     onAdd={handleAdd}
                     onRemove={handleRemove}
                     onValidate={handleValidateCount}
@@ -555,7 +533,17 @@ export default function AtelierTangram({ log }) {
                 <PhaseName
                     situation={s}
                     feedback={feedback}
+                    onContinue={handleNameContinue}
                     onSelect={handleSelectName}
+                />
+            )}
+
+            {/* Modale "carré déjà rempli" */}
+            {showFullModal && (
+                <FullModal
+                    message={`Le ${s.tout} est déjà rempli ! Il n'est plus nécessaire d'ajouter.`}
+                    color={COLOR}
+                    onClose={() => setShowFullModal(false)}
                 />
             )}
         </div>
@@ -563,10 +551,5 @@ export default function AtelierTangram({ log }) {
 }
 
 AtelierTangram.propTypes = {
-    /**
-     * Fonction d'émission d'événements vers le journal pédagogique.
-     * Signature : log(type: string, data: Object) => void
-     * @see useEventLog
-     */
     log: PropTypes.func.isRequired,
 };

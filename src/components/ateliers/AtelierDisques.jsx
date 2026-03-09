@@ -4,25 +4,26 @@
  * @description
  * Activité en deux phases enchaînées pour chaque situation :
  *
- * 1. **Phase `count`** — L'élève ajoute des secteurs jusqu'à compléter le disque.
+ * 1. **Phase `count`** — Le disque commence vide. L'élève ajoute des secteurs
+ *    un à un jusqu'à le remplir entièrement, puis valide. Un secteur de
+ *    référence (toujours visible) rappelle la part à compter.
+ *
  * 2. **Phase `name`**  — L'élève choisit parmi 4 options le nom de la fraction.
  *
  * ────────────────────────────────────────────────────────────────
- * Particularités visuelles
+ * Modèle de remplissage
  * ────────────────────────────────────────────────────────────────
- * - Un secteur actif (index `d.ai`) est toujours visible et coloré.
- * - Les autres secteurs s'ajoutent un à un en cliquant "Ajouter".
- * - La validation n'est possible que quand le disque est entier
- *   (placed + 1 === d.n).
+ * `placed` va de 0 (disque vide) à d.n (disque plein).
+ * Ordre de remplissage : secteur `ai` en premier (= secteur de référence),
+ * puis les autres dans l'ordre des index SVG.
+ * Tenter d'ajouter quand placed === d.n → FullModal.
  *
  * ────────────────────────────────────────────────────────────────
  * Options de nommage
  * ────────────────────────────────────────────────────────────────
- * Générées aléatoirement à chaque situation via `useMemo` :
- * la réponse correcte + 3 distracteurs tirés de FNAME.
+ * Générées aléatoirement à chaque situation via `useMemo`.
  *
- * @see useEventLog  Pour la structure du journal d'événements
- * @see FNAME        Pour la table des noms de fractions
+ * @see useEventLog
  */
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
@@ -42,65 +43,66 @@ import { arc } from "../../utils/svg.js";
 import Btn from "../ui/Btn.jsx";
 import Bubble from "../ui/Bubble.jsx";
 import ProgDots from "../ui/ProgDots.jsx";
-import CountBlocks from "../ui/CountBlocks.jsx";
 import DoneScreen from "../ui/DoneScreen.jsx";
+import FullModal from "../ui/FullModal.jsx";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
-/** Couleur thématique de l'atelier Disques */
 const COLOR = "#7C3AED";
-/** Score maximal (2 points × nombre de situations) */
 const MAX_SCORE = DQ.length * 2;
-/** Rayon du disque SVG */
 const RADIUS = 85;
-/** Centre du disque SVG */
 const CENTER = 100;
 
-// ─── Sous-composant SVG ────────────────────────────────────────────────────────
+// ─── DisqueSVG ─────────────────────────────────────────────────────────────────
 
 /**
- * Représentation SVG du disque avec le secteur actif et les secteurs ajoutés.
+ * Disque progressivement rempli secteur par secteur.
  *
- * @param {Object} props
- * @param {Object} props.situation - Données de la situation (n, ai, color)
- * @param {number} props.placed    - Nombre de secteurs ajoutés (hors secteur actif)
+ * placed=0 → disque vide. placed=d.n → disque plein.
+ * Ordre de remplissage : secteur ai en premier, puis les autres.
  *
- * @returns {JSX.Element}
+ * @param {{ situation: Object, placed: number }} props
  */
-function DisqueSVG({ situation: d, placed }) {
+function DisqueSVG({ situation: d, placed, size = 200 }) {
     const step = 360 / d.n;
 
-    // Ordre de remplissage : tous les index sauf le secteur actif
+    // Ordre de remplissage : ai en tête (correspond au secteur de référence)
     const fillOrder = useMemo(
-        () =>
-            Array.from({ length: d.n }, (_, k) => k).filter((k) => k !== d.ai),
+        () => [
+            d.ai,
+            ...Array.from({ length: d.n }, (_, k) => k).filter(
+                (k) => k !== d.ai
+            ),
+        ],
         [d.n, d.ai]
     );
 
     return (
         <svg
             viewBox="0 0 200 200"
-            aria-label={`Disque divisé en ${d.n} parts, ${placed + 1} colorée${placed > 0 ? "s" : ""}`}
+            aria-label={`Disque divisé en ${d.n} parts, ${placed} colorée${placed > 1 ? "s" : ""}`}
             style={{
-                width: "200px",
-                height: "200px",
+                width: `${size}px`,
+                height: `${size}px`,
                 filter: "drop-shadow(0 4px 14px rgba(0,0,0,.12))",
             }}
         >
             <circle cx={CENTER} cy={CENTER} r={88} fill="white" />
 
             {Array.from({ length: d.n }).map((_, i) => {
-                const a1 = i * step;
-                const a2 = a1 + step;
-                const isActive = i === d.ai;
-                const isPlaced = !isActive && fillOrder.indexOf(i) < placed;
-
+                const isPlaced = fillOrder.indexOf(i) < placed;
                 return (
                     <path
                         key={i}
-                        d={arc(CENTER, CENTER, RADIUS, a1, a2)}
-                        fill={isActive || isPlaced ? d.color : "#E2E8F0"}
-                        opacity={isActive ? 0.9 : isPlaced ? 0.65 : 0.5}
+                        d={arc(
+                            CENTER,
+                            CENTER,
+                            RADIUS,
+                            i * step,
+                            (i + 1) * step
+                        )}
+                        fill={isPlaced ? d.color : "#E2E8F0"}
+                        opacity={isPlaced ? 0.85 : 0.4}
                         stroke="white"
                         strokeWidth="1.5"
                     />
@@ -127,51 +129,41 @@ DisqueSVG.propTypes = {
         color: PropTypes.string.isRequired,
     }).isRequired,
     placed: PropTypes.number.isRequired,
+    size: PropTypes.number,
 };
 
-// ─── Phase comptage ─────────────────────────────────────────────────────────────
+// ─── PhaseCount ────────────────────────────────────────────────────────────────
 
 /**
  * Interface de la phase de comptage pour l'atelier Disques.
  *
  * @param {Object}   props
  * @param {Object}   props.situation  - Données de la situation
- * @param {number}   props.placed     - Secteurs ajoutés (hors secteur actif)
- * @param {Object}   props.feedback   - { type, msg } ou null
+ * @param {number}   props.placed     - Secteurs placés (0..d.n)
+ * @param {Object}   props.feedback   - { type, msg } | null
+ * @param {Function} props.onContinue - Transition vers la phase name
  * @param {Function} props.onAdd      - Ajouter un secteur
  * @param {Function} props.onRemove   - Retirer un secteur
  * @param {Function} props.onValidate - Valider le comptage
- *
- * @returns {JSX.Element}
  */
 function PhaseCount({
     situation: d,
     placed,
     feedback,
+    onContinue,
     onAdd,
     onRemove,
     onValidate,
 }) {
-    const full = placed + 1 >= d.n;
-
     return (
         <div className="flex flex-col gap-3">
-            <div className="bg-slate-50 rounded-2xl p-2 text-center">
-                <p className="text-sm font-bold text-slate-500 mb-1">
-                    {placed + 1} secteur{placed > 0 ? "s" : ""} coloré
-                    {placed > 0 ? "s" : ""}
-                </p>
-                <CountBlocks placed={placed + 1} max={d.n} color={d.color} />
-            </div>
-
             <div className="flex gap-3 justify-center">
                 <button
                     onClick={onAdd}
-                    disabled={full}
                     aria-label="Ajouter un secteur"
                     className="btn-add flex-1 py-4 rounded-2xl text-2xl font-bold text-white
-                     shadow-md disabled:opacity-40 touch-manipulation"
-                    style={{ background: full ? "#9CA3AF" : d.color }}
+                     shadow-md touch-manipulation"
+                    style={{ background: d.color }}
                 >
                     ➕ Ajouter
                 </button>
@@ -186,16 +178,24 @@ function PhaseCount({
                 </button>
             </div>
 
-            {feedback && <Bubble type={feedback.type} msg={feedback.msg} />}
+            {feedback && (
+                <Bubble
+                    type={feedback.type}
+                    msg={feedback.msg}
+                    onContinue={feedback.type === "ok" ? onContinue : null}
+                />
+            )}
 
-            <button
-                onClick={onValidate}
-                className="py-4 rounded-2xl text-lg font-bold text-white shadow-md
-                   hover:brightness-110 active:scale-95 transition-all touch-manipulation"
-                style={{ background: "#4C1D95" }}
-            >
-                ✓ Le disque est rempli !
-            </button>
+            {feedback?.type !== "ok" && (
+                <button
+                    onClick={onValidate}
+                    className="py-4 rounded-2xl text-lg font-bold text-white shadow-md
+                     hover:brightness-110 active:scale-95 transition-all touch-manipulation"
+                    style={{ background: "#4C1D95" }}
+                >
+                    ✓ Le disque est rempli !
+                </button>
+            )}
         </div>
     );
 }
@@ -210,6 +210,7 @@ PhaseCount.propTypes = {
         type: PropTypes.string,
         msg: PropTypes.string,
     }),
+    onContinue: PropTypes.func.isRequired,
     onAdd: PropTypes.func.isRequired,
     onRemove: PropTypes.func.isRequired,
     onValidate: PropTypes.func.isRequired,
@@ -217,31 +218,34 @@ PhaseCount.propTypes = {
 
 PhaseCount.defaultProps = { feedback: null };
 
-// ─── Phase nommage ──────────────────────────────────────────────────────────────
+// ─── PhaseName ─────────────────────────────────────────────────────────────────
 
 /**
  * Interface de la phase de nommage pour l'atelier Disques.
  *
  * @param {Object}   props
- * @param {string[]} props.opts     - Quatre options proposées (mélangées)
- * @param {string}   props.answer   - Fraction attendue
- * @param {Object}   props.feedback - { type, msg } ou null
- * @param {Function} props.onSelect - Callback(option: string)
- *
- * @returns {JSX.Element}
+ * @param {string[]} props.opts       - Quatre options proposées
+ * @param {string}   props.answer     - Fraction attendue
+ * @param {Object}   props.feedback   - { type, msg } | null
+ * @param {Function} props.onContinue - Avancement à la situation suivante
+ * @param {Function} props.onSelect   - Callback(option: string)
  */
-function PhaseName({ opts, answer, feedback, onSelect }) {
+function PhaseName({ opts, answer, feedback, onContinue, onSelect }) {
     return (
         <div className="flex flex-col gap-3">
-            {feedback && <Bubble type={feedback.type} msg={feedback.msg} />}
+            {feedback && (
+                <Bubble
+                    type={feedback.type}
+                    msg={feedback.msg}
+                    onContinue={feedback.type === "ok" ? onContinue : null}
+                />
+            )}
             <div className="flex flex-wrap gap-3 justify-center">
                 {opts.map((opt) => {
                     let v = "idle";
-                    if (feedback)
-                        v =
-                            opt === answer && feedback.type === "ok"
-                                ? "ok"
-                                : "off";
+                    if (feedback && feedback.type === "ok") {
+                        v = opt === answer ? "ok" : "off";
+                    }
                     return (
                         <Btn
                             key={opt}
@@ -263,6 +267,7 @@ PhaseName.propTypes = {
         type: PropTypes.string,
         msg: PropTypes.string,
     }),
+    onContinue: PropTypes.func.isRequired,
     onSelect: PropTypes.func.isRequired,
 };
 
@@ -275,8 +280,6 @@ PhaseName.defaultProps = { feedback: null };
  *
  * @param {Object}   props
  * @param {Function} props.log - Émetteur d'événements pédagogiques
- *
- * @returns {JSX.Element}
  */
 export default function AtelierDisques({ log }) {
     const [idx, setIdx] = useState(0);
@@ -284,6 +287,7 @@ export default function AtelierDisques({ log }) {
     const [phase, setPhase] = useState("count");
     const [feedback, setFeedback] = useState(null);
     const [locked, setLocked] = useState(false);
+    const [showFullModal, setShowFullModal] = useState(false);
     const [nameErr, setNameErr] = useState(0);
     const [score, setScore] = useState(0);
     const [done, setDone] = useState(false);
@@ -293,7 +297,6 @@ export default function AtelierDisques({ log }) {
 
     const d = DQ[idx];
 
-    // ── Initialisation ─────────────────────────────────────────────────────────
     useEffect(() => {
         sitStart.current = Date.now();
         countErrCount.current = 0;
@@ -301,7 +304,6 @@ export default function AtelierDisques({ log }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [idx]);
 
-    // ── Options de nommage (stable par situation) ──────────────────────────────
     const nameOpts = useMemo(() => {
         const correct = FNAME[d.n];
         const others = [2, 3, 4, 5, 6, 8, 10]
@@ -312,19 +314,18 @@ export default function AtelierDisques({ log }) {
         return [correct, ...others].sort(() => Math.random() - 0.5);
     }, [d.n]);
 
-    // ── Reset complet ──────────────────────────────────────────────────────────
     const reset = useCallback(() => {
         setIdx(0);
         setPlaced(0);
         setPhase("count");
         setFeedback(null);
         setLocked(false);
+        setShowFullModal(false);
         setNameErr(0);
         setScore(0);
         setDone(false);
     }, []);
 
-    // ── Avancement vers la situation suivante ──────────────────────────────────
     const doAdvance = useCallback(
         (finalNameErr) => {
             const dur = Date.now() - sitStart.current;
@@ -357,9 +358,15 @@ export default function AtelierDisques({ log }) {
         [idx, d, log]
     );
 
-    // ── Handlers COUNT ─────────────────────────────────────────────────────────
+    // ── Handlers COUNT ──────────────────────────────────────────────────────────
+
+    /** Ajouter : modale si le disque est déjà plein. */
     const handleAdd = useCallback(() => {
-        if (placed + 1 < d.n) setPlaced((p) => p + 1);
+        if (placed >= d.n) {
+            setShowFullModal(true);
+        } else {
+            setPlaced((p) => p + 1);
+        }
         setFeedback(null);
     }, [placed, d.n]);
 
@@ -369,46 +376,39 @@ export default function AtelierDisques({ log }) {
     }, []);
 
     const handleValidateCount = useCallback(() => {
-        const total = placed + 1;
-
-        if (total === d.n) {
+        if (placed === d.n) {
             setScore((s) => s + 1);
             log("COUNT_OK", { idx, countErrors: countErrCount.current });
             setFeedback({
                 type: "ok",
                 msg: okCountMsg(d.n, "secteur", "disque"),
             });
-            setTimeout(() => {
-                setPhase("name");
-                setFeedback(null);
-            }, 1800);
-        } else if (total < d.n) {
+        } else if (placed < d.n) {
             countErrCount.current++;
-            log("COUNT_ERR", { idx, placed: total, expected: d.n });
-            setFeedback({ type: "err", msg: errCountFew(total, d.n) });
+            log("COUNT_ERR", { idx, placed, expected: d.n });
+            setFeedback({ type: "err", msg: errCountFew(placed, d.n) });
         } else {
             countErrCount.current++;
-            log("COUNT_ERR", { idx, placed: total, expected: d.n });
-            setFeedback({ type: "err", msg: errCountMany(total, d.n) });
+            log("COUNT_ERR", { idx, placed, expected: d.n });
+            setFeedback({ type: "err", msg: errCountMany(placed, d.n) });
         }
     }, [placed, d, idx, log]);
 
-    // ── Handlers NAME ──────────────────────────────────────────────────────────
+    // ── Handlers NAME ────────────────────────────────────────────────────────────
+
     const handleSelectName = useCallback(
         (opt) => {
             if (locked) return;
-            setLocked(true);
 
             const ans = FNAME[d.n];
-
             if (opt === ans) {
+                setLocked(true);
                 setScore((s) => s + 1);
                 log("NAME_OK", { idx, nameErrors: nameErr });
                 setFeedback({
                     type: "ok",
                     msg: okNameMsg(d.n, "secteur", "disque", ans),
                 });
-                setTimeout(() => doAdvance(nameErr), 2000);
             } else {
                 const ne = nameErr + 1;
                 setNameErr(ne);
@@ -417,16 +417,24 @@ export default function AtelierDisques({ log }) {
                     type: "err",
                     msg: ne === 1 ? errName1(d.n, "secteurs") : errName2(d.n),
                 });
-                setTimeout(() => {
-                    setFeedback(null);
-                    setLocked(false);
-                }, 2200);
             }
         },
-        [locked, d, nameErr, idx, doAdvance, log]
+        [locked, d, nameErr, idx, log]
     );
 
-    // ── Rendu ──────────────────────────────────────────────────────────────────
+    // ── Callbacks de continuation ────────────────────────────────────────────────
+
+    const handleCountContinue = useCallback(() => {
+        setPhase("name");
+        setFeedback(null);
+    }, []);
+
+    const handleNameContinue = useCallback(() => {
+        doAdvance(nameErr);
+    }, [doAdvance, nameErr]);
+
+    // ── Rendu ────────────────────────────────────────────────────────────────────
+
     if (done) {
         return (
             <DoneScreen
@@ -461,14 +469,55 @@ export default function AtelierDisques({ log }) {
                     : "Ce secteur représente _____ du disque."}
             </div>
 
-            {/* Rappel du découpage */}
-            <div className="bg-slate-50 rounded-2xl p-2 text-center text-sm font-semibold text-purple-700">
-                Le disque est partagé en {d.n} parts égales.
-            </div>
+            {/* ── Visualisation : disque à remplir + modèle du secteur, même échelle ── */}
+            {/*
+        Les deux SVGs : size=150px CSS, viewBox="0 0 200 200".
+        150 + 150 + gap ≈ 316px → tient sur un écran 375px.
+        Le secteur modèle est tourné de d.rot° autour du centre pour éviter
+        toute orientation prototypique (corde verticale, pointe cardinale…).
+      */}
+            <div className="flex items-end justify-center gap-4">
+                {/* Le disque à remplir progressivement */}
+                <div className="flex flex-col items-center gap-1">
+                    <DisqueSVG situation={d} placed={placed} size={150} />
+                    <span className="text-xs font-semibold text-slate-400">
+                        le disque
+                    </span>
+                </div>
 
-            {/* SVG */}
-            <div className="flex justify-center">
-                <DisqueSVG situation={d} placed={placed} />
+                {/* Le modèle du secteur : même taille CSS, rotation non-prototypique */}
+                <div className="flex flex-col items-center gap-1">
+                    <svg
+                        viewBox="0 0 200 200"
+                        aria-label="Modèle : un secteur"
+                        style={{
+                            width: "150px",
+                            height: "150px",
+                            flexShrink: 0,
+                        }}
+                    >
+                        <path
+                            d={arc(
+                                CENTER,
+                                CENTER,
+                                RADIUS,
+                                d.ai * (360 / d.n),
+                                (d.ai + 1) * (360 / d.n)
+                            )}
+                            fill={d.color}
+                            opacity={0.9}
+                            stroke="white"
+                            strokeWidth="2"
+                            transform={`rotate(${d.rot}, ${CENTER}, ${CENTER})`}
+                        />
+                    </svg>
+                    <span
+                        className="text-xs font-semibold"
+                        style={{ color: d.color }}
+                    >
+                        un secteur
+                    </span>
+                </div>
             </div>
 
             {/* Phase active */}
@@ -477,6 +526,7 @@ export default function AtelierDisques({ log }) {
                     situation={d}
                     placed={placed}
                     feedback={feedback}
+                    onContinue={handleCountContinue}
                     onAdd={handleAdd}
                     onRemove={handleRemove}
                     onValidate={handleValidateCount}
@@ -486,7 +536,17 @@ export default function AtelierDisques({ log }) {
                     opts={nameOpts}
                     answer={FNAME[d.n]}
                     feedback={feedback}
+                    onContinue={handleNameContinue}
                     onSelect={handleSelectName}
+                />
+            )}
+
+            {/* Modale "disque déjà rempli" */}
+            {showFullModal && (
+                <FullModal
+                    message="Le disque est déjà rempli ! Il n'est plus nécessaire d'ajouter."
+                    color={COLOR}
+                    onClose={() => setShowFullModal(false)}
                 />
             )}
         </div>
@@ -494,9 +554,5 @@ export default function AtelierDisques({ log }) {
 }
 
 AtelierDisques.propTypes = {
-    /**
-     * Émetteur d'événements vers le journal pédagogique.
-     * Signature : log(type: string, data: Object) => void
-     */
     log: PropTypes.func.isRequired,
 };
