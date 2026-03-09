@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+  <title>Fractions CE1 – Ateliers S6</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    body{margin:0;font-family:'Nunito',sans-serif;background:#F1EDE4;-webkit-user-select:none;user-select:none}
+    @keyframes pop   {0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+    @keyframes shake {0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+    @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes slideup{from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:none}}
+    @keyframes ping2 {0%{transform:scale(1);opacity:1}70%,100%{transform:scale(1.8);opacity:0}}
+    .kf-pop   {animation:pop    .35s ease}
+    .kf-shake {animation:shake  .4s ease}
+    .kf-in    {animation:fadein .3s ease}
+    .kf-up    {animation:slideup .35s cubic-bezier(.2,.8,.3,1)}
+    .kf-ping  {animation:ping2 1.4s ease infinite}
+    svg polygon,svg path{transition:opacity .25s ease,fill .25s ease}
+    .btn-add{transition:transform .1s,box-shadow .1s}
+    .btn-add:active{transform:scale(.94)}
+    @media print{
+      .no-print{display:none!important}
+      body{background:white}
+      .print-page{box-shadow:none!important;border-radius:0!important}
+    }
+  </style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const {useState,useRef,useCallback,useEffect,useMemo}=React;
+
+/* ══════════════════════════════════════════════════════════════
+   HELPERS SVG
+══════════════════════════════════════════════════════════════ */
+function polar(cx,cy,r,deg){const a=(deg-90)*Math.PI/180;return{x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)}}
+function arc(cx,cy,r,a1,a2){const s=polar(cx,cy,r,a1),e=polar(cx,cy,r,a2),lg=a2-a1>180?1:0;return`M${cx},${cy}L${s.x.toFixed(1)},${s.y.toFixed(1)}A${r},${r},0,${lg},1,${e.x.toFixed(1)},${e.y.toFixed(1)}Z`}
+function fmtMs(ms){if(!ms&&ms!==0)return'—';const s=Math.round(ms/1000);return s<60?`${s}s`:`${Math.floor(s/60)}m${String(s%60).padStart(2,'0')}s`}
+
+/* ══════════════════════════════════════════════════════════════
+   FEEDBACK FACTORY (Tricot — procédural exclusivement)
+══════════════════════════════════════════════════════════════ */
+const FNAME={2:'un demi',3:'un tiers',4:'un quart',5:'un cinquième',6:'un sixième',8:'un huitième',9:'un neuvième',10:'un dixième'};
+function ruleMsg(n){return n===2?'Quand il faut 2 parts égales pour faire le tout, on dit «un demi».'
+  :n===3?'Quand il faut 3 parts égales, on dit «un tiers».'
+  :n===4?'Quand il faut 4 parts égales, on dit «un quart».'
+  :`Quand il faut ${n} parts égales, on dit «un ${n}-ième».`}
+function okCountMsg(n,p,t){return`Il faut bien ${n} ${p} pour remplir le ${t}. Maintenant, nomme la fraction.`}
+function okNameMsg(n,p,t,f){return`Il faut ${n} ${p} pour faire le ${t} → c'est «${f}».`}
+function errCountFew(placed,n){return`Il reste de la place. Tu en as ${placed}, il en faut ${n}. Continue à en ajouter.`}
+function errCountMany(placed,n){return`Tu en as ${placed} mais le tout ne peut en contenir que ${n}. Retire-en.`}
+function errName1(n,p){return`Tu as compté ${n} ${p}. Quelle fraction contient le nombre ${n} ?`}
+function errName2(n){return ruleMsg(n)}
+
+/* ══════════════════════════════════════════════════════════════
+   DONNÉES — TANGRAM (5 situations)
+══════════════════════════════════════════════════════════════ */
+const TG=[
+  {id:'tg1',label:'Grand triangle ①',pieceLabel:'grand triangle',color:'#2563EB',ghostC:'#BFDBFE',
+   active:'10,10 190,10 10,190',ghosts:['190,10 190,190 10,190'],
+   n:2,answer:'un demi',tout:'carré',
+   fOpts:['un demi','un tiers','un quart','un huitième']},
+  {id:'tg2',label:'Triangle ②',pieceLabel:'triangle',color:'#EA580C',ghostC:'#FED7AA',
+   active:'10,10 190,10 100,100',ghosts:['190,10 190,190 100,100','10,190 190,190 100,100','10,10 10,190 100,100'],
+   n:4,answer:'un quart',tout:'carré',
+   fOpts:['un demi','un quart','un sixième','un huitième']},
+  {id:'tg3',label:'Petit triangle ③',pieceLabel:'petit triangle',color:'#16A34A',ghostC:'#BBF7D0',
+   active:'10,10 100,10 100,100',
+   ghosts:['10,10 10,100 100,100','100,10 190,10 100,100','190,10 190,100 100,100',
+           '10,100 100,100 10,190','100,100 100,190 10,190','100,100 190,100 190,190','100,100 100,190 190,190'],
+   n:8,answer:'un huitième',tout:'carré',
+   fOpts:['un quart','un sixième','un huitième','un demi']},
+  {id:'tg4',label:'Petit carré ④',pieceLabel:'petit carré',color:'#DB2777',ghostC:'#FBCFE8',
+   active:'10,10 100,10 100,100 10,100',
+   ghosts:['100,10 190,10 190,100 100,100','10,100 100,100 100,190 10,190','100,100 190,100 190,190 100,190'],
+   n:4,answer:'un quart',tout:'grand carré',
+   fOpts:['un demi','un tiers','un quart','un huitième']},
+  {id:'tg5',label:'Grand triangle ⑤',pieceLabel:'grand triangle',color:'#7C3AED',ghostC:'#DDD6FE',
+   active:'190,10 190,190 10,190',ghosts:['10,10 190,10 10,190'],
+   n:2,answer:'un demi',tout:'carré',
+   fOpts:['un demi','un quart','un huitième','un tiers']},
+];
+
+/* DONNÉES — DISQUES (7 situations) */
+const DQ=[
+  {n:2, ai:0,color:'#7C3AED',light:'#EDE9FE'},
+  {n:3, ai:0,color:'#16A34A',light:'#DCFCE7'},
+  {n:4, ai:1,color:'#0891B2',light:'#CFFAFE'},
+  {n:5, ai:0,color:'#B45309',light:'#FEF3C7'},
+  {n:6, ai:1,color:'#0F766E',light:'#CCFBF1'},
+  {n:8, ai:2,color:'#DB2777',light:'#FCE7F3'},
+  {n:10,ai:3,color:'#DC2626',light:'#FEE2E2'},
+];
+
+/* DONNÉES — CUISENAIRE (6 situations) */
+const UNIT=22;
+const CUI=[
+  {len:1,bg:'#F9FAFB',bd:'#9CA3AF',name:'blanche',refLen:10,refBg:'#F97316',refBd:'#C2410C',refName:'orange',
+   n:10,answer:'un dixième',nonUnit:false,
+   fOpts:['un dixième','un cinquième','un huitième','un quart'],
+   hint:'Il faut 10 réglettes blanches pour couvrir la réglette orange.'},
+  {len:2,bg:'#EF4444',bd:'#B91C1C',name:'rouge',refLen:10,refBg:'#F97316',refBd:'#C2410C',refName:'orange',
+   n:5,answer:'un cinquième',nonUnit:false,
+   fOpts:['un cinquième','un dixième','un quart','un demi'],
+   hint:'Il faut 5 réglettes rouges pour couvrir la réglette orange.'},
+  {len:5,bg:'#EAB308',bd:'#CA8A04',name:'jaune',refLen:10,refBg:'#F97316',refBd:'#C2410C',refName:'orange',
+   n:2,answer:'un demi',nonUnit:false,
+   fOpts:['un demi','un quart','un cinquième','deux cinquièmes'],
+   hint:'Il faut 2 réglettes jaunes pour couvrir la réglette orange.'},
+  {len:2,bg:'#EF4444',bd:'#B91C1C',name:'rouge',refLen:6,refBg:'#16A34A',refBd:'#166534',refName:'vert foncé',
+   n:3,answer:'un tiers',nonUnit:false,
+   fOpts:['un tiers','un sixième','un quart','un demi'],
+   hint:'Il faut 3 réglettes rouges pour couvrir la réglette vert foncé.'},
+  {len:1,bg:'#F9FAFB',bd:'#9CA3AF',name:'blanche',refLen:6,refBg:'#16A34A',refBd:'#166534',refName:'vert foncé',
+   n:6,answer:'un sixième',nonUnit:false,
+   fOpts:['un sixième','un tiers','un huitième','un dixième'],
+   hint:'Il faut 6 réglettes blanches pour couvrir la réglette vert foncé.'},
+  {len:4,bg:'#A855F7',bd:'#7E22CE',name:'violette',refLen:10,refBg:'#F97316',refBd:'#C2410C',refName:'orange',
+   n:null,answer:'deux cinquièmes',nonUnit:true,
+   fOpts:['deux cinquièmes','un cinquième','deux dixièmes','un demi'],
+   hint:"La réglette violette = 2 réglettes rouges. La rouge est un cinquième. Donc la violette = 2 × un cinquième."},
+];
+
+/* ══════════════════════════════════════════════════════════════
+   JOURNAL D'ÉVÉNEMENTS
+   Chaque événement : {type, data, t}
+   Types :
+     SIT_START   {idx, id, label}
+     COUNT_ERR   {idx, placed, expected}
+     COUNT_OK    {idx, countErrors}
+     NAME_ERR    {idx, chosen, answer, errN}
+     NAME_OK     {idx, nameErrors}
+     HINT_USED   {idx}
+     SIT_DONE    {idx, label, n, answer, countErrors, nameErrors, durationMs, fullScore}
+     ATELIER_DONE {totalScore, maxScore, durationMs}
+══════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════
+   UI PARTAGÉ
+══════════════════════════════════════════════════════════════ */
+function Btn({label,onClick,v='idle',cls=''}){
+  const S={idle:'bg-white text-slate-800 border-2 border-slate-200 hover:border-blue-300 hover:shadow-md active:scale-95 cursor-pointer',
+           ok:'bg-emerald-500 text-white border-2 border-emerald-400 kf-pop cursor-default',
+           err:'bg-red-50 text-red-600 border-2 border-red-300 kf-shake cursor-default',
+           off:'bg-slate-50 text-slate-300 border-2 border-slate-100 cursor-default'};
+  return <button onClick={v==='idle'?onClick:undefined}
+    className={`py-3 px-4 rounded-2xl text-base font-bold transition-all duration-150 min-w-[110px] touch-manipulation select-none ${S[v]} ${cls}`}>{label}</button>;
+}
+function Bubble({type,msg}){
+  if(!msg)return null;
+  const S={ok:'bg-emerald-50 text-emerald-900 border border-emerald-200',err:'bg-red-50 text-red-800 border border-red-200',hint:'bg-amber-50 text-amber-900 border border-amber-200'};
+  return <div className={`rounded-2xl py-3 px-4 text-sm font-semibold kf-in leading-snug ${S[type]||S.hint}`}>{msg}</div>;
+}
+function ProgDots({done,total,color}){
+  return <div className="flex gap-1.5 flex-wrap">{Array.from({length:total}).map((_,i)=>(
+    <span key={i} className="inline-block w-2.5 h-2.5 rounded-full transition-colors duration-300"
+      style={{background:i<done?color:'#CBD5E1'}}/>))}</div>;
+}
+function CountBlocks({placed,max,color}){
+  return <div className="flex flex-wrap gap-1 justify-center my-1">{Array.from({length:max}).map((_,i)=>(
+    <div key={i} className="rounded transition-all duration-200"
+      style={{width:max<=8?'32px':'24px',height:max<=8?'32px':'24px',
+              background:i<placed?color:'#E2E8F0',
+              transform:i===placed-1&&placed>0?'scale(1.15)':'scale(1)',
+              boxShadow:i===placed-1&&placed>0?`0 0 0 2px ${color}44`:undefined}}/>))}</div>;
+}
+function DoneScreen({score,max,label,onReset,color}){
+  const pct=max>0?Math.round(score/max*100):0;
+  const [e,m]=pct===100?['🏆','Parfait !']:pct>=70?['⭐','Très bien !']:['💪','Continue !'];
+  return <div className="flex flex-col items-center gap-5 py-8 kf-in">
+    <div className="text-6xl">{e}</div>
+    <p className="text-3xl font-bold" style={{fontFamily:"'Fredoka',sans-serif",color}}>{m}</p>
+    <p className="text-base text-slate-500 text-center">{label} · {score}/{max} points</p>
+    <div className="w-48 h-3 bg-slate-200 rounded-full overflow-hidden">
+      <div className="h-full rounded-full transition-all duration-700" style={{width:`${pct}%`,background:color}}/></div>
+    <button onClick={onReset} className="text-white font-bold py-3 px-8 rounded-2xl text-lg shadow-md" style={{background:color}}>↺ Recommencer</button>
+  </div>;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ATELIER TANGRAM
+══════════════════════════════════════════════════════════════ */
+function AtelierTangram({log}){
+  const [idx,setIdx]=useState(0);
+  const [placed,setPlaced]=useState(0);
+  const [phase,setPhase]=useState('count');
+  const [fb,setFb]=useState(null);
+  const [locked,setLocked]=useState(false);
+  const [nameErr,setNameErr]=useState(0);
+  const [score,setScore]=useState(0);
+  const [done,setDone]=useState(false);
+  const sitStart=useRef(Date.now());
+  const countErrCount=useRef(0);
+
+  const s=TG[idx];
+  const COLOR='#2563EB';
+
+  useEffect(()=>{sitStart.current=Date.now();countErrCount.current=0;log('SIT_START',{idx,id:s.id,label:s.label});},[idx]);
+
+  const reset=()=>{setIdx(0);setPlaced(0);setPhase('count');setFb(null);setLocked(false);setNameErr(0);setScore(0);setDone(false)};
+
+  const doAdvance=useCallback((ne)=>{
+    const dur=Date.now()-sitStart.current;
+    log('SIT_DONE',{idx,label:s.label,n:s.n,answer:s.answer,
+      countErrors:countErrCount.current,nameErrors:ne,durationMs:dur,
+      fullScore:countErrCount.current===0&&ne===0});
+    const nx=idx+1;
+    if(nx<TG.length){setIdx(nx);setPlaced(0);setPhase('count');setFb(null);setLocked(false);setNameErr(0);}
+    else{setDone(true);log('ATELIER_DONE',{totalScore:score+1+(countErrCount.current===0?1:0),maxScore:TG.length*2,durationMs:dur});}
+  },[idx,s,score,log]);
+
+  const addPiece=()=>{if(placed<=s.ghosts.length)setPlaced(p=>p+1);setFb(null)};
+  const removePiece=()=>{setPlaced(p=>Math.max(p-1,0));setFb(null)};
+  const overflow=placed>s.ghosts.length;
+
+  const validateCount=()=>{
+    if(placed===s.ghosts.length){
+      setScore(sc=>sc+1);log('COUNT_OK',{idx,countErrors:countErrCount.current});
+      setFb({type:'ok',msg:okCountMsg(s.n,s.pieceLabel,s.tout)});
+      setTimeout(()=>{setPhase('name');setFb(null);},1800);
+    } else if(placed<s.ghosts.length){
+      countErrCount.current++;log('COUNT_ERR',{idx,placed:placed+1,expected:s.n});
+      setFb({type:'err',msg:errCountFew(placed+1,s.n)});
+    } else {
+      countErrCount.current++;log('COUNT_ERR',{idx,placed:placed+1,expected:s.n});
+      setFb({type:'err',msg:errCountMany(placed+1,s.n)});
+    }
+  };
+
+  const validateName=useCallback((opt)=>{
+    if(locked)return;setLocked(true);
+    if(opt===s.answer){
+      setScore(sc=>sc+1);log('NAME_OK',{idx,nameErrors:nameErr});
+      setFb({type:'ok',msg:okNameMsg(s.n,s.pieceLabel,s.tout,s.answer)});
+      setTimeout(()=>doAdvance(nameErr),2000);
+    } else {
+      const ne=nameErr+1;setNameErr(ne);
+      log('NAME_ERR',{idx,chosen:opt,answer:s.answer,errN:ne});
+      setFb({type:'err',msg:ne===1?errName1(s.n,s.pieceLabel+'s'):errName2(s.n)});
+      setTimeout(()=>{setFb(null);setLocked(false);},2200);
+    }
+  },[locked,s,nameErr,idx,doAdvance,log]);
+
+  if(done)return <DoneScreen score={score} max={TG.length*2} label="Tangram" onReset={reset} color={COLOR}/>;
+  const isCount=phase==='count';
+
+  return <div className="flex flex-col gap-4">
+    <div className="flex items-center justify-between">
+      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{idx+1}/{TG.length}</span>
+      <ProgDots done={score} total={TG.length*2} color={COLOR}/>
+    </div>
+    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 text-center text-lg font-bold text-blue-900 leading-snug">
+      {isCount?<>Combien de <em className="not-italic font-extrabold" style={{color:s.color}}>{s.pieceLabel}</em> faut-il pour remplir le {s.tout} ?</>
+              :<>Ce {s.pieceLabel} représente _____ du {s.tout}.</>}
+    </div>
+    <div className="flex justify-center">
+      <svg viewBox="0 0 200 200" style={{width:'200px',height:'200px',filter:'drop-shadow(0 4px 14px rgba(0,0,0,.12))'}}>
+        <rect x="10" y="10" width="180" height="180" fill="#F8FAFC" rx="2"/>
+        {s.ghosts.map((pts,i)=><polygon key={i} points={pts}
+          fill={overflow&&i===s.ghosts.length-1?'#FCA5A5':s.ghostC}
+          opacity={i<placed?(overflow&&i>=s.ghosts.length-1?.55:.85):.1}
+          stroke="white" strokeWidth="1.5"/>)}
+        {overflow&&<polygon points={s.ghosts[0]} fill="#EF4444" opacity={.4} stroke="#FCA5A5" strokeWidth="2"/>}
+        <polygon points={s.active} fill={s.color} stroke="white" strokeWidth="2"/>
+        <rect x="10" y="10" width="180" height="180" fill="none" stroke="#CBD5E1" strokeWidth="2" rx="2"/>
+      </svg>
+    </div>
+    {isCount?<div className="flex flex-col gap-3">
+      <div className="bg-slate-50 rounded-2xl p-3 text-center">
+        <p className="text-sm font-bold text-slate-500 mb-1">{placed+1} {s.pieceLabel}{placed>0?'s':''}{overflow?' ⚠ ça déborde !':''}</p>
+        <CountBlocks placed={placed+1} max={s.n+(overflow?1:0)} color={overflow?'#EF4444':s.color}/>
+      </div>
+      <div className="flex gap-3 justify-center">
+        <button onClick={addPiece} disabled={overflow} className="btn-add flex-1 py-4 rounded-2xl text-2xl font-bold text-white shadow-md disabled:opacity-40"
+          style={{background:overflow?'#9CA3AF':s.color}}>➕ Ajouter</button>
+        <button onClick={removePiece} disabled={placed===0}
+          className="btn-add py-4 px-5 rounded-2xl text-xl font-bold bg-white border-2 border-slate-200 text-slate-600 disabled:opacity-30">↩</button>
+      </div>
+      {fb&&<Bubble type={fb.type} msg={fb.msg}/>}
+      {!overflow&&<button onClick={validateCount} className="py-4 rounded-2xl text-lg font-bold text-white shadow-md" style={{background:'#1E40AF'}}>✓ Le {s.tout} est rempli !</button>}
+    </div>
+    :<div className="flex flex-col gap-3">
+      {fb&&<Bubble type={fb.type} msg={fb.msg}/>}
+      <div className="flex flex-wrap gap-3 justify-center">
+        {s.fOpts.map(opt=>{let v='idle';if(fb)v=opt===s.answer&&fb.type==='ok'?'ok':'off';return <Btn key={opt} label={opt} onClick={()=>validateName(opt)} v={v}/>;}) }
+      </div>
+    </div>}
+  </div>;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ATELIER DISQUES
+══════════════════════════════════════════════════════════════ */
+function AtelierDisques({log}){
+  const [idx,setIdx]=useState(0);
+  const [placed,setPlaced]=useState(0);
+  const [phase,setPhase]=useState('count');
+  const [fb,setFb]=useState(null);
+  const [locked,setLocked]=useState(false);
+  const [nameErr,setNameErr]=useState(0);
+  const [score,setScore]=useState(0);
+  const [done,setDone]=useState(false);
+  const sitStart=useRef(Date.now());
+  const countErrCount=useRef(0);
+  const COLOR='#7C3AED';
+  const d=DQ[idx];
+
+  useEffect(()=>{sitStart.current=Date.now();countErrCount.current=0;log('SIT_START',{idx,id:`dq${idx}`,label:`Disque ÷${d.n}`});},[idx]);
+
+  const reset=()=>{setIdx(0);setPlaced(0);setPhase('count');setFb(null);setLocked(false);setNameErr(0);setScore(0);setDone(false)};
+
+  const doAdvance=useCallback((ne)=>{
+    const dur=Date.now()-sitStart.current;
+    log('SIT_DONE',{idx,label:`Disque ÷${d.n}`,n:d.n,answer:FNAME[d.n],
+      countErrors:countErrCount.current,nameErrors:ne,durationMs:dur,
+      fullScore:countErrCount.current===0&&ne===0});
+    const nx=idx+1;
+    if(nx<DQ.length){setIdx(nx);setPlaced(0);setPhase('count');setFb(null);setLocked(false);setNameErr(0);}
+    else setDone(true);
+  },[idx,d,log]);
+
+  const addSector=()=>{if(placed<d.n)setPlaced(p=>p+1);setFb(null)};
+  const removeSector=()=>{setPlaced(p=>Math.max(p-1,0));setFb(null)};
+  const step=360/d.n;
+
+  const validateCount=()=>{
+    const total=placed+1;
+    if(total===d.n){
+      setScore(s=>s+1);log('COUNT_OK',{idx,countErrors:countErrCount.current});
+      setFb({type:'ok',msg:okCountMsg(d.n,'secteur','disque')});
+      setTimeout(()=>{setPhase('name');setFb(null);},1800);
+    } else {
+      countErrCount.current++;log('COUNT_ERR',{idx,placed:total,expected:d.n});
+      setFb({type:'err',msg:total<d.n?errCountFew(total,d.n):errCountMany(total,d.n)});
+    }
+  };
+
+  const nameOpts=useMemo(()=>{
+    const correct=FNAME[d.n];
+    const others=[2,3,4,5,6,8,10].filter(k=>k!==d.n).sort(()=>Math.random()-.5).slice(0,3).map(k=>FNAME[k]);
+    return[correct,...others].sort(()=>Math.random()-.5);
+  },[d.n]);
+
+  const validateName=useCallback((opt)=>{
+    if(locked)return;setLocked(true);
+    const ans=FNAME[d.n];
+    if(opt===ans){
+      setScore(s=>s+1);log('NAME_OK',{idx,nameErrors:nameErr});
+      setFb({type:'ok',msg:okNameMsg(d.n,'secteur','disque',ans)});
+      setTimeout(()=>doAdvance(nameErr),2000);
+    } else {
+      const ne=nameErr+1;setNameErr(ne);
+      log('NAME_ERR',{idx,chosen:opt,answer:ans,errN:ne});
+      setFb({type:'err',msg:ne===1?errName1(d.n,'secteurs'):errName2(d.n)});
+      setTimeout(()=>{setFb(null);setLocked(false);},2200);
+    }
+  },[locked,d,nameErr,idx,doAdvance,log]);
+
+  if(done)return <DoneScreen score={score} max={DQ.length*2} label="Disques" onReset={reset} color={COLOR}/>;
+  const isCount=phase==='count';
+
+  return <div className="flex flex-col gap-4">
+    <div className="flex items-center justify-between">
+      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{idx+1}/{DQ.length}</span>
+      <ProgDots done={score} total={DQ.length*2} color={COLOR}/>
+    </div>
+    <div className="bg-purple-50 border border-purple-100 rounded-2xl p-3 text-center text-lg font-bold text-purple-900 leading-snug">
+      {isCount?<>Combien de secteurs faut-il pour remplir le disque entier ?</>
+              :<>Ce secteur représente _____ du disque.</>}
+    </div>
+    <div className="bg-slate-50 rounded-2xl p-2 text-center text-sm font-semibold text-purple-700">
+      Le disque est partagé en {d.n} parts égales.
+    </div>
+    <div className="flex justify-center">
+      <svg viewBox="0 0 200 200" style={{width:'200px',height:'200px',filter:'drop-shadow(0 4px 14px rgba(0,0,0,.12))'}}>
+        <circle cx="100" cy="100" r="88" fill="white"/>
+        {Array.from({length:d.n}).map((_,i)=>{
+          const a1=i*step,a2=a1+step,isActive=i===d.ai;
+          const order=[...Array(d.n).keys()].filter(k=>k!==d.ai);
+          const isPlaced=!isActive&&order.indexOf(i)<placed;
+          return <path key={i} d={arc(100,100,85,a1,a2)}
+            fill={isActive?d.color:isPlaced?d.color:'#E2E8F0'}
+            opacity={isActive?.9:isPlaced?.65:.5} stroke="white" strokeWidth="1.5"/>;
+        })}
+        <circle cx="100" cy="100" r="85" fill="none" stroke="#CBD5E1" strokeWidth="1.5"/>
+        <circle cx="100" cy="100" r="4" fill="white"/>
+      </svg>
+    </div>
+    {isCount?<div className="flex flex-col gap-3">
+      <div className="bg-slate-50 rounded-2xl p-2 text-center">
+        <p className="text-sm font-bold text-slate-500 mb-1">{placed+1} secteur{placed>0?'s':''} coloré{placed>0?'s':''}</p>
+        <CountBlocks placed={placed+1} max={d.n} color={d.color}/>
+      </div>
+      <div className="flex gap-3 justify-center">
+        <button onClick={addSector} disabled={placed+1>=d.n}
+          className="btn-add flex-1 py-4 rounded-2xl text-2xl font-bold text-white shadow-md disabled:opacity-40"
+          style={{background:placed+1>=d.n?'#9CA3AF':d.color}}>➕ Ajouter</button>
+        <button onClick={removeSector} disabled={placed===0}
+          className="btn-add py-4 px-5 rounded-2xl text-xl font-bold bg-white border-2 border-slate-200 text-slate-600 disabled:opacity-30">↩</button>
+      </div>
+      {fb&&<Bubble type={fb.type} msg={fb.msg}/>}
+      <button onClick={validateCount} className="py-4 rounded-2xl text-lg font-bold text-white shadow-md" style={{background:'#4C1D95'}}>✓ Le disque est rempli !</button>
+    </div>
+    :<div className="flex flex-col gap-3">
+      {fb&&<Bubble type={fb.type} msg={fb.msg}/>}
+      <div className="flex flex-wrap gap-3 justify-center">
+        {nameOpts.map(opt=>{let v='idle';if(fb)v=opt===FNAME[d.n]&&fb.type==='ok'?'ok':'off';return <Btn key={opt} label={opt} onClick={()=>validateName(opt)} v={v}/>;}) }
+      </div>
+    </div>}
+  </div>;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ATELIER CUISENAIRE
+══════════════════════════════════════════════════════════════ */
+function Rod({len,bg,bd,label}){
+  return <div className="flex items-center gap-2">
+    {label&&<span className="text-xs font-bold text-slate-400 shrink-0" style={{width:'72px',textAlign:'right'}}>{label}</span>}
+    <div className="rounded-lg flex items-center justify-center font-bold text-xs" style={{width:`${len*UNIT}px`,height:'36px',background:bg,border:`2px solid ${bd}`,
+      color:len===1?'#9CA3AF':'white',boxShadow:'0 2px 6px rgba(0,0,0,.12)',flexShrink:0}}>{len>1?len:''}</div>
+  </div>;
+}
+
+function AtelierCuisenaire({log}){
+  const [idx,setIdx]=useState(0);
+  const [placed,setPlaced]=useState(0);
+  const [phase,setPhase]=useState('count');
+  const [fb,setFb]=useState(null);
+  const [locked,setLocked]=useState(false);
+  const [nameErr,setNameErr]=useState(0);
+  const [score,setScore]=useState(0);
+  const [done,setDone]=useState(false);
+  const [hintShown,setHintShown]=useState(false);
+  const sitStart=useRef(Date.now());
+  const countErrCount=useRef(0);
+  const COLOR='#B45309';
+  const c=CUI[idx];
+
+  useEffect(()=>{
+    sitStart.current=Date.now();countErrCount.current=0;setHintShown(false);
+    setPlaced(0);setFb(null);setLocked(false);setNameErr(0);
+    if(c.nonUnit)setPhase('explain');else setPhase('count');
+    log('SIT_START',{idx,id:`cu${idx}`,label:`Réglette ${c.name} / ${c.refName}`});
+  },[idx]);
+
+  const reset=()=>{setIdx(0);setScore(0);setDone(false)};
+
+  const doAdvance=useCallback((ne)=>{
+    const dur=Date.now()-sitStart.current;
+    log('SIT_DONE',{idx,label:`${c.name} / ${c.refName}`,n:c.n,answer:c.answer,
+      countErrors:c.nonUnit?null:countErrCount.current,nameErrors:ne,durationMs:dur,
+      hintUsed:hintShown,fullScore:(c.nonUnit||countErrCount.current===0)&&ne===0});
+    const nx=idx+1;
+    if(nx<CUI.length)setIdx(nx);
+    else setDone(true);
+  },[idx,c,hintShown,log]);
+
+  const addRod=()=>{if(placed<=c.n)setPlaced(p=>p+1);setFb(null)};
+  const removeRod=()=>{setPlaced(p=>Math.max(p-1,0));setFb(null)};
+  const rodsOverflow=placed>c.n;
+
+  const validateCount=()=>{
+    if(placed===c.n){
+      setScore(s=>s+1);log('COUNT_OK',{idx,countErrors:countErrCount.current});
+      setFb({type:'ok',msg:okCountMsg(c.n,`réglette ${c.name}`,`réglette ${c.refName}`)});
+      setTimeout(()=>{setPhase('name');setFb(null);},1800);
+    } else {
+      countErrCount.current++;
+      const total=placed;
+      log('COUNT_ERR',{idx,placed:total,expected:c.n});
+      setFb({type:'err',msg:total<c.n?`Il reste de la place ! Tu en as ${total}, il en faut ${c.n}.`:`Tu en as ${total} mais il ne faut que ${c.n}. Retire-en.`});
+    }
+  };
+
+  const validateName=useCallback((opt)=>{
+    if(locked)return;setLocked(true);
+    if(opt===c.answer){
+      setScore(s=>s+1);log('NAME_OK',{idx,nameErrors:nameErr});
+      const msg=c.nonUnit?`Réglette violette = 2 × rouge = 2 × un cinquième → c'est bien «deux cinquièmes» de l'orange.`
+        :okNameMsg(c.n,`réglette ${c.name}`,`réglette ${c.refName}`,c.answer);
+      setFb({type:'ok',msg});
+      setTimeout(()=>doAdvance(nameErr),2200);
+    } else {
+      const ne=nameErr+1;setNameErr(ne);
+      log('NAME_ERR',{idx,chosen:opt,answer:c.answer,errN:ne});
+      const msg=c.nonUnit?(ne===1?`La violette = 2 rouges. La rouge est un cinquième. 2 fois un cinquième = ?`:`Réglette violette = 2 × un cinquième = «deux cinquièmes».`)
+        :(ne===1?errName1(c.n,`réglette ${c.name}`):errName2(c.n));
+      setFb({type:'err',msg});
+      setTimeout(()=>{setFb(null);setLocked(false);},2400);
+    }
+  },[locked,c,nameErr,idx,doAdvance,log]);
+
+  if(done)return <DoneScreen score={score} max={CUI.length*2-1} label="Cuisenaire" onReset={reset} color={COLOR}/>;
+
+  return <div className="flex flex-col gap-4">
+    <div className="flex items-center justify-between">
+      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{idx+1}/{CUI.length}</span>
+      <ProgDots done={score} total={CUI.length*2-1} color={COLOR}/>
+    </div>
+    <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 text-center text-lg font-bold text-amber-900 leading-snug">
+      {phase==='count'&&<>Combien de réglettes <em className="not-italic font-extrabold" style={{color:c.bg==='#F9FAFB'?'#6B7280':c.bg}}>{c.name}</em> faut-il pour couvrir la réglette <em className="not-italic font-extrabold" style={{color:c.refBg}}>{c.refName}</em> ?</>}
+      {phase==='name'&&<>La réglette {c.name} représente _____ de la réglette {c.refName}.</>}
+      {phase==='explain'&&<>★ Défi — La réglette violette représente _____ de la réglette orange.</>}
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-100 p-4 overflow-x-auto shadow-sm">
+      <div className="flex flex-col gap-3" style={{minWidth:`${Math.max(c.refLen,rodsOverflow?placed*c.len:c.n*c.len)*UNIT+80}px`}}>
+        <Rod len={c.refLen} bg={c.refBg} bd={c.refBd} label="Le tout →"/>
+        <div style={{borderTop:'1px dashed #E2E8F0'}}/>
+        {phase!=='explain'?
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-400 shrink-0" style={{width:'72px',textAlign:'right'}}>Partie →</span>
+            <div className="flex gap-0.5 items-center">
+              {Array.from({length:Math.max(placed,1)}).map((_,i)=>(
+                <div key={i} className="rounded-md flex items-center justify-center text-xs font-bold transition-all"
+                  style={{width:`${c.len*UNIT}px`,height:'36px',background:i>=c.n?'#EF4444':c.bg,
+                          border:`2px solid ${i>=c.n?'#B91C1C':c.bd}`,color:c.len===1?'#9CA3AF':'white',
+                          flexShrink:0,opacity:placed===0&&i===0?.3:1,
+                          transform:i===placed-1?'scale(1.05)':'scale(1)'}}>{c.len>1?c.len:''}</div>))}
+              {rodsOverflow&&<span className="text-xs font-bold text-red-500 ml-1">⚠ déborde !</span>}
+            </div>
+          </div>
+          :<div className="flex flex-col gap-2">
+            <Rod len={4} bg={c.bg} bd={c.bd} label="Violette →"/>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 shrink-0" style={{width:'72px',textAlign:'right'}}>= 2 rouges</span>
+              <div className="flex gap-0.5">
+                <div className="rounded-md" style={{width:`${2*UNIT}px`,height:'28px',background:'#EF4444',border:'2px solid #B91C1C'}}/>
+                <div className="rounded-md" style={{width:`${2*UNIT}px`,height:'28px',background:'#EF4444',border:'2px solid #B91C1C'}}/>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 font-semibold" style={{marginLeft:'80px'}}>Rouge = un cinquième de l'orange → Violette = ?</p>
+          </div>}
+      </div>
+    </div>
+    {phase==='count'&&<div className="flex flex-col gap-3">
+      <div className="bg-slate-50 rounded-2xl p-2 text-center">
+        <p className="text-sm font-bold text-slate-500 mb-1">{placed} réglette{placed>1?'s':''} posée{placed>1?'s':''}</p>
+        <CountBlocks placed={placed} max={c.n+(rodsOverflow?1:0)} color={rodsOverflow?'#EF4444':c.bg==='#F9FAFB'?'#9CA3AF':c.bg}/>
+      </div>
+      <div className="flex gap-3 justify-center">
+        <button onClick={addRod} disabled={placed>=c.n+1}
+          className="btn-add flex-1 py-4 rounded-2xl text-2xl font-bold text-white shadow-md disabled:opacity-40"
+          style={{background:rodsOverflow?'#9CA3AF':'#B45309'}}>➕ Ajouter</button>
+        <button onClick={removeRod} disabled={placed===0}
+          className="btn-add py-4 px-5 rounded-2xl text-xl font-bold bg-white border-2 border-slate-200 text-slate-600 disabled:opacity-30">↩</button>
+      </div>
+      {!hintShown&&<button onClick={()=>{setHintShown(true);log('HINT_USED',{idx});}}
+        className="text-xs text-amber-700 underline text-center touch-manipulation">Besoin d'un indice ?</button>}
+      {hintShown&&<Bubble type="hint" msg={`💡 ${c.hint}`}/>}
+      {fb&&<Bubble type={fb.type} msg={fb.msg}/>}
+      <button onClick={validateCount} className="py-4 rounded-2xl text-lg font-bold text-white shadow-md" style={{background:'#92400E'}}>✓ La réglette {c.refName} est couverte !</button>
+    </div>}
+    {(phase==='name'||phase==='explain')&&<div className="flex flex-col gap-3">
+      {fb&&<Bubble type={fb.type} msg={fb.msg}/>}
+      <div className="flex flex-wrap gap-3 justify-center">
+        {c.fOpts.map(opt=>{let v='idle';if(fb)v=opt===c.answer&&fb.type==='ok'?'ok':'off';return <Btn key={opt} label={opt} onClick={()=>validateName(opt)} v={v}/>;}) }
+      </div>
+    </div>}
+  </div>;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TABLEAU DE BORD ENSEIGNANT
+══════════════════════════════════════════════════════════════ */
+function SituationDot({status,label}){
+  // status : 'pending'|'active'|'perfect'|'good'|'struggled'
+  const cfg={
+    pending:  {bg:'#E2E8F0',ring:null,   icon:'',    tip:'À venir'},
+    active:   {bg:'#3B82F6',ring:'#93C5FD',icon:'',  tip:'En cours'},
+    perfect:  {bg:'#10B981',ring:null,   icon:'✓',   tip:'Réussi du 1er coup'},
+    good:     {bg:'#F59E0B',ring:null,   icon:'✓',   tip:'Réussi avec erreurs'},
+    struggled:{bg:'#F97316',ring:null,   icon:'!',   tip:'Difficultés'},
+  };
+  const c=cfg[status]||cfg.pending;
+  return(
+    <div className="flex flex-col items-center gap-1" title={c.tip}>
+      <div className="relative flex items-center justify-center w-9 h-9 rounded-full text-white text-xs font-bold"
+        style={{background:c.bg,boxShadow:c.ring?`0 0 0 3px ${c.ring},0 0 0 5px ${c.ring}55`:undefined}}>
+        {status==='active'&&<span className="absolute inset-0 rounded-full kf-ping" style={{background:c.bg,opacity:.4}}/>}
+        {c.icon}
+      </div>
+      <span className="text-xs font-bold text-slate-400 text-center leading-none" style={{maxWidth:'48px'}}>{label}</span>
+    </div>
+  );
+}
+
+function ErrPill({chosen,answer,count}){
+  return(
+    <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-1.5">
+      <span className="text-sm font-bold text-red-600">«{chosen}»</span>
+      <span className="text-xs text-slate-400">au lieu de</span>
+      <span className="text-sm font-bold text-emerald-700">«{answer}»</span>
+      {count>1&&<span className="text-xs font-bold text-red-500 ml-1">×{count}</span>}
+    </div>
+  );
+}
+
+function LiveTimer({startTs}){
+  const [, setTick]=useState(0);
+  useEffect(()=>{const id=setInterval(()=>setTick(t=>t+1),1000);return()=>clearInterval(id);},[]);
+  return <span>{fmtMs(Date.now()-startTs)}</span>;
+}
+
+function Dashboard({events,atelierMeta,startTs,onClose}){
+  // ── Dériver les stats des événements ──────────────────────
+  const sits=useMemo(()=>{
+    const map={};
+    events.forEach(({type,data})=>{
+      if(type==='SIT_START')map[data.idx]={...data,status:'active',countErrors:0,nameErrors:0,hintUsed:false,durationMs:null,distractors:[]};
+      if(!map[data.idx])return;
+      if(type==='COUNT_ERR')map[data.idx].countErrors=(map[data.idx].countErrors||0)+1;
+      if(type==='NAME_ERR'){map[data.idx].nameErrors=(map[data.idx].nameErrors||0)+1;map[data.idx].distractors.push({chosen:data.chosen,answer:data.answer});}
+      if(type==='HINT_USED')map[data.idx].hintUsed=true;
+      if(type==='SIT_DONE'){Object.assign(map[data.idx],{durationMs:data.durationMs,fullScore:data.fullScore,status:data.fullScore?'perfect':data.countErrors+data.nameErrors<=2?'good':'struggled'});}
+    });
+    return Object.values(map).sort((a,b)=>a.idx-b.idx);
+  },[events]);
+
+  const done=sits.filter(s=>s.status!=='active');
+  const current=sits.find(s=>s.status==='active');
+  const totalSits=atelierMeta.total;
+  const firstTryCount=done.filter(s=>s.countErrors===0||s.countErrors===null).length;
+  const firstTryName=done.filter(s=>s.nameErrors===0).length;
+
+  // All distractors across all situations
+  const allDistractors=useMemo(()=>{
+    const acc={};
+    sits.forEach(s=>(s.distractors||[]).forEach(({chosen,answer})=>{
+      const k=`${chosen}||${answer}`;
+      if(!acc[k])acc[k]={chosen,answer,count:0};
+      acc[k].count++;
+    }));
+    return Object.values(acc).sort((a,b)=>b.count-a.count);
+  },[sits]);
+
+  const hints=sits.filter(s=>s.hintUsed).length;
+  const avgDur=done.length>0?done.reduce((s,x)=>s+(x.durationMs||0),0)/done.length:null;
+
+  return(
+    <div className="fixed inset-0 z-50 flex flex-col" style={{background:'rgba(15,23,42,.85)',backdropFilter:'blur(4px)'}}>
+      <div className="flex-1 overflow-y-auto p-3 pb-8 kf-up print-page">
+        <div className="max-w-xl mx-auto">
+
+          {/* ── Header ── */}
+          <div className="flex items-center justify-between mb-4 no-print">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">📊</span>
+              <div>
+                <p className="text-white font-bold text-lg leading-tight" style={{fontFamily:"'Fredoka',sans-serif"}}>Tableau de bord</p>
+                <p className="text-blue-300 text-xs font-semibold">{atelierMeta.icon} {atelierMeta.label}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={()=>window.print()} className="text-white/60 hover:text-white text-xs font-bold py-2 px-3 rounded-xl border border-white/20 no-print">🖨 Imprimer</button>
+              <button onClick={onClose} className="text-white font-bold text-lg py-1 px-4 rounded-xl" style={{background:'rgba(255,255,255,.15)'}}>✕</button>
+            </div>
+          </div>
+
+          {/* ── Métriques synthèse ── */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {[
+              {label:'Temps',     value:<LiveTimer startTs={startTs}/>, sub:avgDur?`~${fmtMs(avgDur)}/sit`:null, icon:'🕐', bg:'#1E3A5F', c:'#93C5FD'},
+              {label:'Avancement',value:`${done.length}/${totalSits}`,  sub:`${done.length?Math.round(done.length/totalSits*100):0}% terminé`, icon:'📍', bg:'#1A3327', c:'#6EE7B7'},
+              {label:'1er essai', value:`${done.length>0?Math.round((firstTryCount+firstTryName)/(done.length*2)*100):0}%`, sub:'comptage + nommage', icon:'🎯', bg:'#321530', c:'#F9A8D4'},
+            ].map(m=>(
+              <div key={m.label} className="rounded-2xl p-3 text-center flex flex-col items-center gap-0.5" style={{background:m.bg}}>
+                <span className="text-lg">{m.icon}</span>
+                <p className="text-2xl font-bold" style={{color:m.c,fontFamily:"'Fredoka',sans-serif"}}>{m.value}</p>
+                <p className="text-xs font-bold" style={{color:m.c,opacity:.6}}>{m.label}</p>
+                {m.sub&&<p className="text-xs" style={{color:m.c,opacity:.4}}>{m.sub}</p>}
+              </div>
+            ))}
+          </div>
+
+          {/* ── Frise de progression ── */}
+          <div className="bg-white/10 rounded-2xl p-4 mb-3">
+            <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-3">Progression situation par situation</p>
+            <div className="flex flex-wrap gap-3">
+              {Array.from({length:totalSits}).map((_,i)=>{
+                const s=sits.find(x=>x.idx===i);
+                const status=s?s.status:'pending';
+                const label=s?s.label:`S${i+1}`;
+                return <SituationDot key={i} status={status} label={label}/>;
+              })}
+            </div>
+            <div className="flex flex-wrap gap-4 mt-3">
+              {[['perfect','#10B981','1er coup'],['good','#F59E0B','avec erreurs'],['struggled','#F97316','difficultés'],['active','#3B82F6','en cours'],['pending','#E2E8F0','à venir']].map(([st,clr,lbl])=>(
+                <div key={st} className="flex items-center gap-1.5">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full" style={{background:clr}}/>
+                  <span className="text-xs text-white/50 font-semibold">{lbl}</span>
+                </div>))}
+            </div>
+          </div>
+
+          {/* ── Tableau par situation ── */}
+          {done.length>0&&<div className="bg-white rounded-2xl p-4 mb-3">
+            <p className="text-slate-600 text-xs font-bold uppercase tracking-widest mb-3">Détail par situation</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" style={{borderCollapse:'separate',borderSpacing:'0 4px'}}>
+                <thead>
+                  <tr className="text-xs font-bold text-slate-400 uppercase">
+                    <th className="text-left pb-2 pr-2">Situation</th>
+                    <th className="text-center pb-2 px-2">Comptage</th>
+                    <th className="text-center pb-2 px-2">Nommage</th>
+                    <th className="text-center pb-2 px-2">Durée</th>
+                    {hints>0&&<th className="text-center pb-2 px-2">Indice</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {done.map(s=>{
+                    const rowBg=s.status==='perfect'?'#F0FDF4':s.status==='good'?'#FFFBEB':'#FFF7ED';
+                    const ceOk=s.countErrors===0||s.countErrors===null;
+                    const neOk=s.nameErrors===0;
+                    return(
+                      <tr key={s.idx} style={{background:rowBg}}>
+                        <td className="py-2 px-2 font-semibold text-slate-700 rounded-l-xl text-xs" style={{maxWidth:'100px'}}>{s.label}</td>
+                        <td className="py-2 px-2 text-center">
+                          {s.countErrors===null?<span className="text-slate-300 text-xs">—</span>
+                           :ceOk?<span className="text-emerald-600 font-bold">✓</span>
+                           :<span className="text-amber-600 font-bold text-xs">{s.countErrors}×err</span>}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          {neOk?<span className="text-emerald-600 font-bold">✓</span>
+                               :<span className="text-amber-600 font-bold text-xs">{s.nameErrors}×err</span>}
+                        </td>
+                        <td className="py-2 px-2 text-center text-slate-500 text-xs rounded-r-xl">{fmtMs(s.durationMs)}</td>
+                        {hints>0&&<td className="py-2 px-2 text-center rounded-r-xl">{s.hintUsed?<span className="text-amber-500 text-base">💡</span>:<span className="text-slate-200 text-xs">—</span>}</td>}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>}
+
+          {/* ── Erreurs repérées (conceptions erronées) ── */}
+          {allDistractors.length>0&&<div className="bg-white rounded-2xl p-4 mb-3">
+            <p className="text-slate-600 text-xs font-bold uppercase tracking-widest mb-1">Erreurs repérées — conceptions à travailler</p>
+            <p className="text-xs text-slate-400 mb-3">Distracteurs choisis lors des erreurs de nommage :</p>
+            <div className="flex flex-wrap gap-2">
+              {allDistractors.map((d,i)=><ErrPill key={i} chosen={d.chosen} answer={d.answer} count={d.count}/>)}
+            </div>
+            <p className="text-xs text-slate-300 mt-3">💬 À exploiter lors de la mise en commun</p>
+          </div>}
+
+          {/* ── Situation en cours ── */}
+          {current&&<div className="rounded-2xl p-3 mb-3 border border-blue-400/30" style={{background:'rgba(59,130,246,.15)'}}>
+            <p className="text-blue-200 text-xs font-bold uppercase tracking-widest mb-1">Situation en cours</p>
+            <p className="text-white font-bold">{current.label}</p>
+            {current.countErrors>0&&<p className="text-xs text-amber-300 mt-1">Comptage : {current.countErrors} essai{current.countErrors>1?'s':''} incorrect{current.countErrors>1?'s':''}</p>}
+            {current.nameErrors>0&&<p className="text-xs text-orange-300">Nommage : {current.nameErrors} essai{current.nameErrors>1?'s':''} incorrect{current.nameErrors>1?'s':''}</p>}
+          </div>}
+
+          {/* ── Légende pédagogique ── */}
+          <div className="rounded-2xl p-3" style={{background:'rgba(255,255,255,.06)'}}>
+            <p className="text-white/40 text-xs text-center font-semibold">
+              CAREC Grenoble · A. Tricot (modes opératoires) · Enseignement explicite · S6/6
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MENU ENSEIGNANT (appui long → choix)
+══════════════════════════════════════════════════════════════ */
+function TeacherMenu({onDash,onChange,onClose}){
+  return(
+    <div className="fixed inset-0 z-40 flex items-end justify-center p-4 no-print"
+      style={{background:'rgba(0,0,0,.5)'}}>
+      <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-4 kf-up">
+        <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Menu enseignant·e</p>
+        <div className="flex flex-col gap-2">
+          <button onClick={onDash}
+            className="flex items-center gap-3 p-4 rounded-2xl text-left font-bold text-slate-800 hover:bg-blue-50 transition"
+            style={{background:'#EFF6FF',border:'2px solid #BFDBFE'}}>
+            <span className="text-2xl">📊</span>
+            <div><p className="font-bold text-blue-800">Tableau de bord</p><p className="text-xs text-blue-500 font-semibold">Suivi du groupe en temps réel</p></div>
+          </button>
+          <button onClick={onChange}
+            className="flex items-center gap-3 p-4 rounded-2xl text-left font-bold text-slate-800 hover:bg-red-50 transition"
+            style={{background:'#FEF2F2',border:'2px solid #FECACA'}}>
+            <span className="text-2xl">🔄</span>
+            <div><p className="font-bold text-red-800">Changer d'atelier</p><p className="text-xs text-red-500 font-semibold">Réinitialise et revient à la sélection</p></div>
+          </button>
+          <button onClick={onClose} className="py-3 rounded-2xl text-slate-400 font-bold text-sm hover:bg-slate-50">Annuler</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SETUP SCREEN
+══════════════════════════════════════════════════════════════ */
+function SetupScreen({onSelect}){
+  const CHOICES=[
+    {id:'tg',icon:'🔷',label:'Atelier 1',sub:'Tangram',    color:'#2563EB',light:'#EFF6FF',desc:'Fractions du carré avec les pièces du Tangram', total:TG.length},
+    {id:'dq',icon:'⭕', label:'Atelier 2',sub:'Disques',    color:'#7C3AED',light:'#F5F3FF',desc:'Fractions du disque avec les secteurs angulaires', total:DQ.length},
+    {id:'cu',icon:'📏',label:'Atelier 3',sub:'Cuisenaire', color:'#B45309',light:'#FFFBEB',desc:'Fractions des réglettes colorées', total:CUI.length},
+  ];
+  return(
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-8" style={{background:'#F1EDE4'}}>
+      <div className="text-center">
+        <h1 className="text-4xl font-bold text-slate-800 mb-1" style={{fontFamily:"'Fredoka',sans-serif"}}>🧮 Fractions CE1</h1>
+        <p className="text-slate-500 font-semibold text-sm">L'enseignant·e sélectionne l'atelier pour ce groupe</p>
+      </div>
+      <div className="flex flex-col gap-4 w-full" style={{maxWidth:'400px'}}>
+        {CHOICES.map(c=>(
+          <button key={c.id} onClick={()=>onSelect(c.id,c.total)}
+            className="w-full rounded-3xl p-5 text-left shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
+            style={{background:c.light,border:`2.5px solid ${c.color}22`}}>
+            <div className="flex items-center gap-4">
+              <span className="text-4xl">{c.icon}</span>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest" style={{color:c.color}}>{c.label} · {c.total} situations</p>
+                <p className="text-xl font-bold text-slate-800" style={{fontFamily:"'Fredoka',sans-serif"}}>{c.sub}</p>
+                <p className="text-sm text-slate-500 font-semibold mt-0.5">{c.desc}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-slate-300 text-center font-semibold">CAREC Grenoble · Enseignement explicite · Séance 6/6</p>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   APP ROOT
+══════════════════════════════════════════════════════════════ */
+const META={
+  tg:{icon:'🔷',label:'Tangram',    color:'#2563EB',light:'#EFF6FF',border:'#BFDBFE',sub:'Fractions du carré'},
+  dq:{icon:'⭕', label:'Disques',    color:'#7C3AED',light:'#F5F3FF',border:'#DDD6FE',sub:'Fractions du disque'},
+  cu:{icon:'📏', label:'Cuisenaire', color:'#B45309',light:'#FFFBEB',border:'#FDE68A',sub:'Fractions des réglettes'},
+};
+
+function App(){
+  const [atelier,setAtelier]=useState(null);
+  const [totalSits,setTotalSits]=useState(0);
+  const [events,setEvents]=useState([]);
+  const [showMenu,setShowMenu]=useState(false);
+  const [showDash,setShowDash]=useState(false);
+  const holdRef=useRef(null);
+  const startTs=useRef(null);
+
+  const log=useCallback((type,data)=>{
+    setEvents(prev=>[...prev,{type,data,t:Date.now()}]);
+  },[]);
+
+  const selectAtelier=(id,total)=>{
+    setAtelier(id);setTotalSits(total);setEvents([]);startTs.current=Date.now();
+  };
+
+  const startHold=()=>{holdRef.current=setTimeout(()=>{setShowMenu(true);},2000)};
+  const endHold=()=>clearTimeout(holdRef.current);
+
+  if(!atelier)return <SetupScreen onSelect={selectAtelier}/>;
+
+  const m=META[atelier];
+
+  return(
+    <div className="min-h-screen" style={{background:'#F1EDE4'}}>
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-10 no-print" style={{background:'#1E3A5F'}}>
+        <div className="flex items-center justify-between px-4 py-2.5" style={{maxWidth:'680px',margin:'0 auto'}}>
+          <div className="flex items-center gap-2"
+            onPointerDown={startHold} onPointerUp={endHold} onPointerLeave={endHold}
+            style={{cursor:'pointer',WebkitTapHighlightColor:'transparent'}}>
+            <span className="text-xl">🧮</span>
+            <span className="text-base font-bold text-white" style={{fontFamily:"'Fredoka',sans-serif"}}>Fractions CE1</span>
+          </div>
+          {/* Bouton dashboard toujours visible pour l'enseignant·e */}
+          <button onClick={()=>setShowDash(true)}
+            className="flex items-center gap-2 py-2 px-3 rounded-xl font-bold text-xs text-white transition"
+            style={{background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.25)'}}>
+            <span>📊</span>
+            <span className="hidden sm:inline">Tableau de bord</span>
+            {events.filter(e=>e.type==='SIT_DONE').length>0&&
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"/>}
+          </button>
+        </div>
+        <div className="px-4 pb-2.5" style={{maxWidth:'680px',margin:'0 auto'}}>
+          <div className="inline-flex items-center gap-2 py-2 px-4 rounded-2xl cursor-pointer"
+            style={{background:m.light,border:`2px solid ${m.border}`}}
+            onPointerDown={startHold} onPointerUp={endHold} onPointerLeave={endHold}>
+            <span>{m.icon}</span>
+            <span className="font-bold text-sm" style={{color:m.color}}>{m.label}</span>
+            <span className="text-xs font-semibold" style={{color:m.color,opacity:.7}}>· {m.sub}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Contenu atelier ── */}
+      <main style={{maxWidth:'680px',margin:'0 auto',padding:'16px'}}>
+        <div className="bg-white rounded-3xl shadow-lg p-5">
+          {atelier==='tg'&&<AtelierTangram key="tg" log={log}/>}
+          {atelier==='dq'&&<AtelierDisques key="dq" log={log}/>}
+          {atelier==='cu'&&<AtelierCuisenaire key="cu" log={log}/>}
+        </div>
+        <p className="text-center text-xs text-slate-300 font-semibold mt-4 no-print">
+          Séquence fractions CE1 · Séance 6/6 · CAREC Grenoble · A. Tricot
+        </p>
+      </main>
+
+      {/* ── Menu enseignant ── */}
+      {showMenu&&<TeacherMenu
+        onDash={()=>{setShowDash(true);setShowMenu(false);}}
+        onChange={()=>{setAtelier(null);setShowMenu(false);}}
+        onClose={()=>setShowMenu(false)}/>}
+
+      {/* ── Dashboard ── */}
+      {showDash&&<Dashboard
+        events={events}
+        atelierMeta={{...m,total:totalSits}}
+        startTs={startTs.current}
+        onClose={()=>setShowDash(false)}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
