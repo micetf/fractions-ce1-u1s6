@@ -1,0 +1,118 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Polices Google (remplace le <link> du HTML) */
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@400;600;700;800&display=swap");
+
+/* Animations — extraites du <style> du monolithe */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+body {
+    margin: 0;
+    font-family: "Nunito", sans-serif;
+    background: #f1ede4;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+@keyframes pop {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.09);
+    }
+}
+@keyframes shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-8px);
+    }
+    75% {
+        transform: translateX(8px);
+    }
+}
+@keyframes fadein {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes slideup {
+    from {
+        opacity: 0;
+        transform: translateY(32px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes ping2 {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    70%,
+    100% {
+        transform: scale(1.8);
+        opacity: 0;
+    }
+}
+
+.kf-pop {
+    animation: pop 0.35s ease;
+}
+.kf-shake {
+    animation: shake 0.4s ease;
+}
+.kf-in {
+    animation: fadein 0.3s ease;
+}
+.kf-up {
+    animation: slideup 0.35s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.kf-ping {
+    animation: ping2 1.4s ease infinite;
+}
+
+svg polygon,
+svg path {
+    transition:
+        opacity 0.25s ease,
+        fill 0.25s ease;
+}
+.btn-add {
+    transition:
+        transform 0.1s,
+        box-shadow 0.1s;
+}
+.btn-add:active {
+    transform: scale(0.94);
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    body {
+        background: white;
+    }
+    .print-page {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+    }
+}
