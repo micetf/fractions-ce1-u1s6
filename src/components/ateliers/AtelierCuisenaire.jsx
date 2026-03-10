@@ -13,11 +13,13 @@
  * 2. **Phase `name`**    — L'élève nomme la fraction composée.
  *
  * ────────────────────────────────────────────────────────────────
- * Corrections visuelles (v3)
+ * Corrections visuelles (v4)
  * ────────────────────────────────────────────────────────────────
+ * - Séparateur adaptatif : clair sur réglettes sombres, sombre sur
+ *   réglettes claires (ex : blanche). Calcul via luminance perçue
+ *   (coefficients ITU-R BT.601) depuis la valeur hex de `c.bg`.
  * - Bac à fond sombre (#1E293B) : toutes les réglettes ressortent,
  *   y compris la réglette blanche (#F9FAFB).
- * - Séparateurs blancs semi-transparents (rgba(255,255,255,0.2)).
  * - Bac sans border CSS (box-shadow inset) : la largeur interne
  *   est exactement refLen × UNIT, garantissant l'alignement.
  * - "La partie →" affichée en permanence comme référence.
@@ -63,6 +65,38 @@ const MAX_SCORE = CUI.length * 2 - 1;
 
 /** Couleur de fond du bac : ardoise sombre pour contraste maximal. */
 const BAC_BG = "#1E293B";
+
+// ─── Utilitaire : couleur de séparateur adaptative ─────────────────────────────
+
+/**
+ * Calcule la luminance perçue d'une couleur hexadécimale (coefficients ITU-R BT.601).
+ * Retourne une valeur entre 0 (noir) et 255 (blanc).
+ *
+ * @param {string} hex - Couleur hexadécimale (ex : "#F9FAFB" ou "#EF4444")
+ * @returns {number} Luminance perçue (0–255)
+ */
+function perceivedLuminance(hex) {
+    const h = hex.replace("#", "");
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    // Coefficients BT.601 (luminance perçue)
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/**
+ * Choisit la couleur du séparateur entre réglettes selon la luminosité du fond.
+ * - Réglette claire (luminance > 180) → séparateur ardoise semi-transparent
+ * - Réglette sombre → séparateur blanc semi-transparent
+ *
+ * @param {string} bg - Couleur de fond de la réglette (hex)
+ * @returns {string} Valeur CSS rgba du séparateur
+ */
+function getSeparatorColor(bg) {
+    return perceivedLuminance(bg) > 180
+        ? "rgba(100, 116, 139, 0.55)" // slate-500 — lisible sur fond clair
+        : "rgba(255, 255, 255, 0.20)"; // blanc semi-transparent — sur fond sombre
+}
 
 // ─── Rod ───────────────────────────────────────────────────────────────────────
 
@@ -113,6 +147,7 @@ Rod.propTypes = {
 };
 
 Rod.defaultProps = { label: null };
+
 // ─── DarkRod ────────────────────────────────────────────────────────────────────
 
 /**
@@ -179,10 +214,11 @@ DarkRod.propTypes = {
  * orange + violette + décomposition en 2 rouges.
  *
  * ────────────────────────────────────────────────────────────────
- * Invariant géométrique
+ * Séparateur adaptatif
  * ────────────────────────────────────────────────────────────────
- *   n × c.len × UNIT = c.refLen × UNIT
- * Aucune border CSS sur le fond ardoise : largeur ext = largeur interne.
+ * La couleur du trait de séparation entre réglettes est calculée
+ * via `getSeparatorColor(c.bg)` pour garantir la lisibilité quelle
+ * que soit la teinte de la réglette (y compris blanche).
  *
  * @param {Object}  props
  * @param {Object}  props.situation - Données de la situation
@@ -193,6 +229,9 @@ function RodVisualizer({ situation: c, placed, phase }) {
     const rodW = c.refLen * UNIT;
     // Largeur min = réglette + padding intérieur (16px × 2)
     const minW = rodW + 32;
+
+    /** Couleur du séparateur adaptée à la luminosité de la réglette courante */
+    const separatorColor = getSeparatorColor(c.bg);
 
     return (
         <div className="rounded-2xl overflow-hidden shadow-sm">
@@ -237,9 +276,12 @@ function RodVisualizer({ situation: c, placed, phase }) {
                             <DarkRod len={c.refLen} bg={c.refBg} bd={c.refBd} />
 
                             {/*
-                Zone d'accumulation — même largeur que l'orange.
+                Zone d'accumulation — même largeur que la réglette de référence.
                 Fond légèrement plus clair pour que l'espace vide reste lisible.
-                Les réglettes poussent depuis la gauche jusqu'à couvrir l'orange.
+                Les réglettes poussent depuis la gauche jusqu'à couvrir la référence.
+
+                Séparateur adaptatif : sombre sur réglettes claires (ex : blanche),
+                clair sur réglettes sombres — via getSeparatorColor(c.bg).
               */}
                             <div
                                 style={{
@@ -264,10 +306,9 @@ function RodVisualizer({ situation: c, placed, phase }) {
                                             width: `${c.len * UNIT}px`,
                                             height: "100%",
                                             background: c.bg,
-                                            /* Séparateur inclus dans box-sizing:border-box → pas de décalage */
                                             borderRight:
                                                 i < placed - 1
-                                                    ? "1px solid rgba(255,255,255,0.2)"
+                                                    ? `1px solid ${separatorColor}`
                                                     : "none",
                                             flexShrink: 0,
                                             display: "flex",
