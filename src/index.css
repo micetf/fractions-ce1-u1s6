@@ -1,10 +1,11 @@
 /* src/index.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 /* Polices Google (remplace le <link> du HTML) */
 @import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@400;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* Animations — extraites du <style> du monolithe */
 *,
