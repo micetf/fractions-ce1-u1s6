@@ -328,7 +328,7 @@ export default function AtelierTangram({ log }) {
                             >
                                 {pluriel(s.pieceLabel)}
                             </em>{" "}
-                            une à une.
+                            un à un.
                         </>
                     ) : (
                         <>
