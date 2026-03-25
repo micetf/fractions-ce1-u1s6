@@ -396,7 +396,18 @@ export default function AtelierDisques({ log }) {
 
             {isPredict && (
                 <PhasePredict
-                    consigne="Combien de parts faut-il pour remplir le disque entier ?"
+                    consigne={
+                        <>
+                            Combien de{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{ color: d.color }}
+                            >
+                                parts
+                            </em>{" "}
+                            faut-il pour remplir le disque ?
+                        </>
+                    }
                     onPredict={handlePredict}
                     color={COLOR}
                 />
