@@ -2,26 +2,50 @@
  * @file AtelierDisques — atelier de fractions avec les parts du disque.
  *
  * @description
- * Activité en deux phases enchaînées pour chaque situation :
+ * Orchestrateur de la séquence : gère l'état, les handlers et le rendu
+ * de haut niveau. Les sous-composants sont délégués à :
  *
- * 1. **Phase `count`** — Le disque commence vide. L'élève ajoute des parts
- *    un à un jusqu'à le remplir entièrement, puis valide. Une part de
- *    référence (toujours visible) rappelle la part à compter.
- *
- * 2. **Phase `name`**  — L'élève choisit parmi 4 options le nom de la fraction.
+ * - DisqueSVG           : rendu SVG du disque
+ * - DisquesPhaseCount   : UI de vérification par manipulation
+ * - DisquesPhaseName    : UI de nommage de la fraction
+ * - PhasePredict        : UI d'anticipation numérique (partagé)
  *
  * ────────────────────────────────────────────────────────────────
- * Modèle de remplissage
+ * Flux des phases par situation
  * ────────────────────────────────────────────────────────────────
- * `placed` va de 0 (disque vide) à d.n (disque plein).
- * Ordre de remplissage : part `ai` en premier (= part de référence),
- * puis les autres dans l'ordre des index SVG.
- * Tenter d'ajouter quand placed === d.n → FullModal.
+ *
+ *   predict → count → name
+ *
+ * 1. **predict** — L'élève anticipe le nombre de parts nécessaires
+ *    (boutons 1–10). Aucun feedback immédiat. La consigne est portée
+ *    par PhasePredict via la prop `consigne`.
+ *
+ * 2. **count**   — L'élève vérifie par manipulation. Le feedback
+ *    intègre la correction de prédiction :
+ *    - `ok`   : prédiction juste ou absente
+ *    - `warn` : manipulation réussie, prédiction inexacte
+ *
+ * 3. **name**    — L'élève nomme la fraction parmi 4 options générées
+ *    dynamiquement via useMemo depuis FNAME.
  *
  * ────────────────────────────────────────────────────────────────
  * Options de nommage
  * ────────────────────────────────────────────────────────────────
- * Générées aléatoirement à chaque situation via `useMemo`.
+ * Générées aléatoirement à chaque situation : 1 correcte + 3 distracteurs
+ * tirés de FNAME, mélangés. Recalculées à chaque changement de d.n.
+ *
+ * ────────────────────────────────────────────────────────────────
+ * Scoring
+ * ────────────────────────────────────────────────────────────────
+ * +1 par phase réussie — max 2 pts/situation = 14 pts total.
+ *
+ * ────────────────────────────────────────────────────────────────
+ * Note StrictMode
+ * ────────────────────────────────────────────────────────────────
+ * `setPhase` et `setPredicted` sont intentionnellement absents du
+ * useEffect pour éviter que le double-invoke de StrictMode en
+ * développement ne remette phase à "predict" après que handlePredict
+ * l'ait basculée à "count". Ils sont réinitialisés dans doAdvance.
  *
  * @see useEventLog
  */
@@ -40,11 +64,14 @@ import {
     errName2,
 } from "../../utils/feedback.js";
 import { arc } from "../../utils/svg.js";
-import Btn from "../ui/Btn.jsx";
-import Bubble from "../ui/Bubble.jsx";
+
+import PhasePredict from "../ui/PhasePredict.jsx";
 import ProgDots from "../ui/ProgDots.jsx";
 import DoneScreen from "../ui/DoneScreen.jsx";
 import FullModal from "../ui/FullModal.jsx";
+import DisqueSVG from "./disques/DisqueSVG.jsx";
+import DisquesPhaseCount from "./disques/DisquesPhaseCount.jsx";
+import DisquesPhaseName from "./disques/DisquesPhaseName.jsx";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
@@ -53,227 +80,7 @@ const MAX_SCORE = DQ.length * 2;
 const RADIUS = 85;
 const CENTER = 100;
 
-// ─── DisqueSVG ─────────────────────────────────────────────────────────────────
-
-/**
- * Disque progressivement rempli part par part.
- *
- * placed=0 → disque vide. placed=d.n → disque plein.
- * Ordre de remplissage : part ai en premier, puis les autres.
- *
- * @param {{ situation: Object, placed: number }} props
- */
-function DisqueSVG({ situation: d, placed, size = 200 }) {
-    const step = 360 / d.n;
-
-    // Ordre de remplissage : ai en tête (correspond à la part de référence)
-    const fillOrder = useMemo(
-        () => [
-            d.ai,
-            ...Array.from({ length: d.n }, (_, k) => k).filter(
-                (k) => k !== d.ai
-            ),
-        ],
-        [d.n, d.ai]
-    );
-
-    return (
-        <svg
-            viewBox="0 0 200 200"
-            aria-label={`Disque divisé en ${d.n} parts, ${placed} colorée${placed > 1 ? "s" : ""}`}
-            style={{
-                width: `${size}px`,
-                height: `${size}px`,
-                filter: "drop-shadow(0 4px 14px rgba(0,0,0,.12))",
-            }}
-        >
-            <circle cx={CENTER} cy={CENTER} r={88} fill="white" />
-
-            {Array.from({ length: d.n }).map((_, i) => {
-                const isPlaced = fillOrder.indexOf(i) < placed;
-                return (
-                    <path
-                        key={i}
-                        d={arc(
-                            CENTER,
-                            CENTER,
-                            RADIUS,
-                            i * step,
-                            (i + 1) * step
-                        )}
-                        fill={isPlaced ? d.color : "#E2E8F0"}
-                        opacity={isPlaced ? 0.85 : 0.4}
-                        stroke="white"
-                        strokeWidth="1.5"
-                    />
-                );
-            })}
-
-            <circle
-                cx={CENTER}
-                cy={CENTER}
-                r={RADIUS}
-                fill="none"
-                stroke="#CBD5E1"
-                strokeWidth="1.5"
-            />
-            <circle cx={CENTER} cy={CENTER} r={4} fill="white" />
-        </svg>
-    );
-}
-
-DisqueSVG.propTypes = {
-    situation: PropTypes.shape({
-        n: PropTypes.number.isRequired,
-        ai: PropTypes.number.isRequired,
-        color: PropTypes.string.isRequired,
-    }).isRequired,
-    placed: PropTypes.number.isRequired,
-    size: PropTypes.number,
-};
-
-// ─── PhaseCount ────────────────────────────────────────────────────────────────
-
-/**
- * Interface de la phase de comptage pour l'atelier Disques.
- *
- * @param {Object}   props
- * @param {Object}   props.situation  - Données de la situation
- * @param {number}   props.placed     - parts placés (0..d.n)
- * @param {Object}   props.feedback   - { type, msg } | null
- * @param {Function} props.onContinue - Transition vers la phase name
- * @param {Function} props.onAdd      - Ajouter une part
- * @param {Function} props.onRemove   - Retirer une part
- * @param {Function} props.onValidate - Valider le comptage
- */
-function PhaseCount({
-    situation: d,
-    placed,
-    feedback,
-    onContinue,
-    onAdd,
-    onRemove,
-    onValidate,
-}) {
-    return (
-        <div className="flex flex-col gap-3">
-            <div className="flex gap-3 justify-center">
-                <button
-                    onClick={onAdd}
-                    aria-label="Ajouter une part"
-                    className="btn-add flex-1 py-4 rounded-2xl text-2xl font-bold text-white
-                     shadow-md touch-manipulation"
-                    style={{ background: d.color }}
-                >
-                    ➕ Ajouter
-                </button>
-                <button
-                    onClick={onRemove}
-                    disabled={placed === 0}
-                    aria-label="Retirer la dernière part"
-                    className="btn-add py-4 px-5 rounded-2xl text-xl font-bold
-                     bg-white border-2 border-slate-200 text-slate-600 disabled:opacity-30"
-                >
-                    ↩
-                </button>
-            </div>
-
-            {feedback && (
-                <Bubble
-                    type={feedback.type}
-                    msg={feedback.msg}
-                    onContinue={feedback.type === "ok" ? onContinue : null}
-                />
-            )}
-
-            {feedback?.type !== "ok" && (
-                <button
-                    onClick={onValidate}
-                    className="py-4 rounded-2xl text-lg font-bold text-white shadow-md
-                     hover:brightness-110 active:scale-95 transition-all touch-manipulation"
-                    style={{ background: "#4C1D95" }}
-                >
-                    ✓ Le disque est rempli !
-                </button>
-            )}
-        </div>
-    );
-}
-
-PhaseCount.propTypes = {
-    situation: PropTypes.shape({
-        n: PropTypes.number.isRequired,
-        color: PropTypes.string.isRequired,
-    }).isRequired,
-    placed: PropTypes.number.isRequired,
-    feedback: PropTypes.shape({
-        type: PropTypes.string,
-        msg: PropTypes.string,
-    }),
-    onContinue: PropTypes.func.isRequired,
-    onAdd: PropTypes.func.isRequired,
-    onRemove: PropTypes.func.isRequired,
-    onValidate: PropTypes.func.isRequired,
-};
-
-PhaseCount.defaultProps = { feedback: null };
-
-// ─── PhaseName ─────────────────────────────────────────────────────────────────
-
-/**
- * Interface de la phase de nommage pour l'atelier Disques.
- *
- * @param {Object}   props
- * @param {string[]} props.opts       - Quatre options proposées
- * @param {string}   props.answer     - Fraction attendue
- * @param {Object}   props.feedback   - { type, msg } | null
- * @param {Function} props.onContinue - Avancement à la situation suivante
- * @param {Function} props.onSelect   - Callback(option: string)
- */
-function PhaseName({ opts, answer, feedback, onContinue, onSelect }) {
-    return (
-        <div className="flex flex-col gap-3">
-            {feedback && (
-                <Bubble
-                    type={feedback.type}
-                    msg={feedback.msg}
-                    onContinue={feedback.type === "ok" ? onContinue : null}
-                />
-            )}
-            <div className="flex flex-wrap gap-3 justify-center">
-                {opts.map((opt) => {
-                    let v = "idle";
-                    if (feedback && feedback.type === "ok") {
-                        v = opt === answer ? "ok" : "off";
-                    }
-                    return (
-                        <Btn
-                            key={opt}
-                            label={opt}
-                            onClick={() => onSelect(opt)}
-                            v={v}
-                        />
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
-PhaseName.propTypes = {
-    opts: PropTypes.arrayOf(PropTypes.string).isRequired,
-    answer: PropTypes.string.isRequired,
-    feedback: PropTypes.shape({
-        type: PropTypes.string,
-        msg: PropTypes.string,
-    }),
-    onContinue: PropTypes.func.isRequired,
-    onSelect: PropTypes.func.isRequired,
-};
-
-PhaseName.defaultProps = { feedback: null };
-
-// ─── Composant principal ────────────────────────────────────────────────────────
+// ─── Composant ─────────────────────────────────────────────────────────────────
 
 /**
  * Atelier Disques — séquence de 7 situations de fractions du disque.
@@ -284,7 +91,8 @@ PhaseName.defaultProps = { feedback: null };
 export default function AtelierDisques({ log }) {
     const [idx, setIdx] = useState(0);
     const [placed, setPlaced] = useState(0);
-    const [phase, setPhase] = useState("count");
+    const [phase, setPhase] = useState("predict");
+    const [predicted, setPredicted] = useState(null);
     const [feedback, setFeedback] = useState(null);
     const [locked, setLocked] = useState(false);
     const [showFullModal, setShowFullModal] = useState(false);
@@ -297,12 +105,17 @@ export default function AtelierDisques({ log }) {
 
     const d = DQ[idx];
 
+    // ── Cycle de vie situation ───────────────────────────────────────────────────
+
     useEffect(() => {
         sitStart.current = Date.now();
         countErrCount.current = 0;
         log("SIT_START", { idx, id: `dq${idx}`, label: `Disque ÷${d.n}` });
+        // phase et predicted réinitialisés dans doAdvance — voir note StrictMode
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [idx]);
+
+    // ── Options de nommage — recalculées à chaque situation ─────────────────────
 
     const nameOpts = useMemo(() => {
         const correct = FNAME[d.n];
@@ -314,10 +127,13 @@ export default function AtelierDisques({ log }) {
         return [correct, ...others].sort(() => Math.random() - 0.5);
     }, [d.n]);
 
+    // ── Reset complet ────────────────────────────────────────────────────────────
+
     const reset = useCallback(() => {
         setIdx(0);
         setPlaced(0);
-        setPhase("count");
+        setPhase("predict");
+        setPredicted(null);
         setFeedback(null);
         setLocked(false);
         setShowFullModal(false);
@@ -326,39 +142,70 @@ export default function AtelierDisques({ log }) {
         setDone(false);
     }, []);
 
+    // ── Avancement situation ─────────────────────────────────────────────────────
+
     const doAdvance = useCallback(
         (finalNameErr) => {
             const dur = Date.now() - sitStart.current;
-            const fullScore = countErrCount.current === 0 && finalNameErr === 0;
+            const isFullScore =
+                countErrCount.current === 0 && finalNameErr === 0;
 
             log("SIT_DONE", {
                 idx,
                 label: `Disque ÷${d.n}`,
                 n: d.n,
                 answer: FNAME[d.n],
+                predictCorrect: predicted === d.n,
                 countErrors: countErrCount.current,
                 nameErrors: finalNameErr,
                 durationMs: dur,
-                fullScore,
+                fullScore: isFullScore,
             });
 
             const next = idx + 1;
             if (next < DQ.length) {
                 setIdx(next);
                 setPlaced(0);
-                setPhase("count");
+                setPhase("predict"); // réinitialisation explicite — pas dans useEffect
+                setPredicted(null); // réinitialisation explicite — pas dans useEffect
                 setFeedback(null);
                 setLocked(false);
                 setNameErr(0);
             } else {
                 setDone(true);
-                log("ATELIER_DONE", { maxScore: MAX_SCORE, durationMs: dur });
+                log("ATELIER_DONE", {
+                    totalScore: score,
+                    maxScore: MAX_SCORE,
+                    durationMs: dur,
+                });
             }
         },
-        [idx, d, log]
+        [idx, d, score, predicted, log]
     );
 
-    // ── Handlers COUNT ──────────────────────────────────────────────────────────
+    // ── Handler PREDICT ──────────────────────────────────────────────────────────
+
+    /**
+     * Enregistre la prédiction et bascule en phase count.
+     * Aucun feedback : la phase count est l'unique source de vérité.
+     *
+     * @param {number} value - Valeur choisie (1–10)
+     */
+    const handlePredict = useCallback(
+        (value) => {
+            setPredicted(value);
+            log("PREDICT", {
+                idx,
+                predicted: value,
+                actual: d.n,
+                correct: value === d.n,
+            });
+            setPhase("count");
+        },
+        [idx, d.n, log]
+    );
+
+    // ── Handlers COUNT ───────────────────────────────────────────────────────────
 
     /** Ajouter : modale si le disque est déjà plein. */
     const handleAdd = useCallback(() => {
@@ -375,14 +222,35 @@ export default function AtelierDisques({ log }) {
         setFeedback(null);
     }, []);
 
+    /**
+     * Valide le comptage et construit le feedback en intégrant la
+     * correction de prédiction.
+     *
+     * Cas ok/warn (manipulation réussie) :
+     * - predicted === null  → message générique (okCountMsg)
+     * - predicted === d.n   → confirmation + félicitation (ok)
+     * - predicted !== d.n   → correction sans pénalité (warn)
+     */
     const handleValidateCount = useCallback(() => {
         if (placed === d.n) {
             setScore((s) => s + 1);
             log("COUNT_OK", { idx, countErrors: countErrCount.current });
-            setFeedback({
-                type: "ok",
-                msg: okCountMsg(d.n, "part", "disque"),
-            });
+
+            let msg;
+            let type;
+
+            if (predicted === null) {
+                msg = okCountMsg(d.n, "part", "disque");
+                type = "ok";
+            } else if (predicted === d.n) {
+                msg = `Tu avais prédit ${d.n} — c'est exact ! Maintenant, nomme la fraction.`;
+                type = "ok";
+            } else {
+                msg = `Tu avais dit ${predicted}, mais en ajoutant tu as trouvé ${d.n}. C'est ça qui compte !`;
+                type = "warn";
+            }
+
+            setFeedback({ type, msg });
         } else if (placed < d.n) {
             countErrCount.current++;
             log("COUNT_ERR", { idx, placed, expected: d.n });
@@ -392,9 +260,9 @@ export default function AtelierDisques({ log }) {
             log("COUNT_ERR", { idx, placed, expected: d.n });
             setFeedback({ type: "err", msg: errCountMany(placed, d.n) });
         }
-    }, [placed, d, idx, log]);
+    }, [placed, d, idx, predicted, log]);
 
-    // ── Handlers NAME ────────────────────────────────────────────────────────────
+    // ── Handlers NAME ─────────────────────────────────────────────────────────────
 
     const handleSelectName = useCallback(
         (opt) => {
@@ -422,7 +290,7 @@ export default function AtelierDisques({ log }) {
         [locked, d, nameErr, idx, log]
     );
 
-    // ── Callbacks de continuation ────────────────────────────────────────────────
+    // ── Continuations ─────────────────────────────────────────────────────────────
 
     const handleCountContinue = useCallback(() => {
         setPhase("name");
@@ -433,7 +301,7 @@ export default function AtelierDisques({ log }) {
         doAdvance(nameErr);
     }, [doAdvance, nameErr]);
 
-    // ── Rendu ────────────────────────────────────────────────────────────────────
+    // ── Rendu ─────────────────────────────────────────────────────────────────────
 
     if (done) {
         return (
@@ -447,11 +315,12 @@ export default function AtelierDisques({ log }) {
         );
     }
 
+    const isPredict = phase === "predict";
     const isCount = phase === "count";
 
     return (
         <div className="flex flex-col gap-4">
-            {/* Progression */}
+            {/* ── Progression ── */}
             <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                     {idx + 1}/{DQ.length}
@@ -459,23 +328,26 @@ export default function AtelierDisques({ log }) {
                 <ProgDots done={score} total={MAX_SCORE} color={COLOR} />
             </div>
 
-            {/* Consigne */}
-            <div
-                className="bg-purple-50 border border-purple-100 rounded-2xl p-3
-                      text-center text-lg font-bold text-purple-900 leading-snug"
-            >
-                {isCount
-                    ? "Combien de parts faut-il pour remplir le disque entier ?"
-                    : "Cette part représente _____ du disque."}
-            </div>
+            {/* ── Consigne — count et name uniquement.
+                   Phase predict : PhasePredict porte sa consigne via prop. ── */}
+            {!isPredict && (
+                <div
+                    className="bg-purple-50 border border-purple-100 rounded-2xl p-3
+                               text-center text-lg font-bold text-purple-900 leading-snug"
+                >
+                    {isCount
+                        ? "Vérifie en ajoutant les parts une à une."
+                        : "Cette part représente _____ du disque."}
+                </div>
+            )}
 
-            {/* ── Visualisation : disque à remplir + modèle de la part, même échelle ── */}
+            {/* ── Visualisation : disque à remplir + modèle de la part ── */}
             {/*
-        Les deux SVGs : size=150px CSS, viewBox="0 0 200 200".
-        150 + 150 + gap ≈ 316px → tient sur un écran 375px.
-        La part modèle est tourné de d.rot° autour du centre pour éviter
-        toute orientation prototypique (corde verticale, pointe cardinale…).
-      */}
+                Les deux SVGs partagent viewBox="0 0 200 200" et size=150px CSS.
+                150 + 150 + gap ≈ 316px → tient sur un écran 375px.
+                La part modèle est tournée de d.rot° autour du centre pour éviter
+                toute orientation prototypique.
+            */}
             <div className="flex items-end justify-center gap-4">
                 {/* Le disque à remplir progressivement */}
                 <div className="flex flex-col items-center gap-1">
@@ -485,7 +357,7 @@ export default function AtelierDisques({ log }) {
                     </span>
                 </div>
 
-                {/* Le modèle de la part : même taille CSS, rotation non-prototypique */}
+                {/* Le modèle de la part — rotation non-prototypique */}
                 <div className="flex flex-col items-center gap-1">
                     <svg
                         viewBox="0 0 200 200"
@@ -520,9 +392,18 @@ export default function AtelierDisques({ log }) {
                 </div>
             </div>
 
-            {/* Phase active */}
-            {isCount ? (
-                <PhaseCount
+            {/* ── Phase active ── */}
+
+            {isPredict && (
+                <PhasePredict
+                    consigne="Combien de parts faut-il pour remplir le disque entier ?"
+                    onPredict={handlePredict}
+                    color={COLOR}
+                />
+            )}
+
+            {isCount && (
+                <DisquesPhaseCount
                     situation={d}
                     placed={placed}
                     feedback={feedback}
@@ -531,8 +412,10 @@ export default function AtelierDisques({ log }) {
                     onRemove={handleRemove}
                     onValidate={handleValidateCount}
                 />
-            ) : (
-                <PhaseName
+            )}
+
+            {!isPredict && !isCount && (
+                <DisquesPhaseName
                     opts={nameOpts}
                     answer={FNAME[d.n]}
                     feedback={feedback}
@@ -541,7 +424,7 @@ export default function AtelierDisques({ log }) {
                 />
             )}
 
-            {/* Modale "disque déjà rempli" */}
+            {/* ── Modale "disque déjà rempli" ── */}
             {showFullModal && (
                 <FullModal
                     message="Le disque est déjà rempli ! Il n'est plus nécessaire d'ajouter."
