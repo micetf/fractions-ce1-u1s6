@@ -272,59 +272,91 @@ function RodVisualizer({ situation: c, placed, phase }) {
                 >
                     {phase !== "explain" ? (
                         <>
-                            {/* Réglette de référence (le tout) */}
-                            <DarkRod len={c.refLen} bg={c.refBg} bd={c.refBd} />
-
-                            {/*
-                Zone d'accumulation — même largeur que la réglette de référence.
-                Fond légèrement plus clair pour que l'espace vide reste lisible.
-                Les réglettes poussent depuis la gauche jusqu'à couvrir la référence.
-
-                Séparateur adaptatif : sombre sur réglettes claires (ex : blanche),
-                clair sur réglettes sombres — via getSeparatorColor(c.bg).
-              */}
+                            {/* Réglette de référence — le tout */}
                             <div
                                 style={{
-                                    width: `${rodW}px`,
-                                    height: "36px",
-                                    borderRadius: "6px",
-                                    background: "rgba(255,255,255,0.06)",
-                                    overflow: "hidden",
-                                    flexShrink: 0,
                                     display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
                                 }}
-                                aria-label={
-                                    placed === 0
-                                        ? "Vide — ajouter des réglettes"
-                                        : `${placed} réglette${placed > 1 ? "s" : ""}`
-                                }
                             >
-                                {Array.from({ length: placed }).map((_, i) => (
-                                    <div
-                                        key={i}
-                                        style={{
-                                            width: `${c.len * UNIT}px`,
-                                            height: "100%",
-                                            background: c.bg,
-                                            borderRight:
-                                                i < placed - 1
-                                                    ? `1px solid ${separatorColor}`
-                                                    : "none",
-                                            flexShrink: 0,
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            color:
-                                                c.len === 1
-                                                    ? "rgba(255,255,255,0.4)"
-                                                    : "rgba(255,255,255,0.9)",
-                                            fontSize: "11px",
-                                            fontWeight: 700,
-                                        }}
-                                    >
-                                        {c.len > 1 ? c.len : ""}
-                                    </div>
-                                ))}
+                                <span
+                                    style={{
+                                        width: "72px",
+                                        textAlign: "right",
+                                        fontSize: "11px",
+                                        fontWeight: 700,
+                                        color: "rgba(255,255,255,0.45)",
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    Le tout →
+                                </span>
+                                <DarkRod
+                                    len={c.refLen}
+                                    bg={c.refBg}
+                                    bd={c.refBd}
+                                />
+                            </div>
+
+                            {/* Zone d'accumulation — spacer de 80px pour aligner sur le tout */}
+                            <div
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                }}
+                            >
+                                <span
+                                    style={{ width: "72px", flexShrink: 0 }}
+                                />
+                                {/* spacer muet */}
+                                <div
+                                    style={{
+                                        width: `${rodW}px`,
+                                        height: "36px",
+                                        borderRadius: "6px",
+                                        background: "rgba(255,255,255,0.06)",
+                                        overflow: "hidden",
+                                        flexShrink: 0,
+                                        display: "flex",
+                                    }}
+                                    aria-label={
+                                        placed === 0
+                                            ? "Vide — ajouter des réglettes"
+                                            : `${placed} réglette${placed > 1 ? "s" : ""}`
+                                    }
+                                >
+                                    {Array.from({ length: placed }).map(
+                                        (_, i) => (
+                                            <div
+                                                key={i}
+                                                style={{
+                                                    width: `${c.len * UNIT}px`,
+                                                    height: "100%",
+                                                    background: c.bg,
+                                                    /* ✅ séparateur adapté à la luminance du fond */
+                                                    borderRight:
+                                                        i < placed - 1
+                                                            ? `1px solid ${separatorColor}`
+                                                            : "none",
+                                                    flexShrink: 0,
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                    color:
+                                                        c.len === 1
+                                                            ? "rgba(255,255,255,0.4)"
+                                                            : "rgba(255,255,255,0.9)",
+                                                    fontSize: "11px",
+                                                    fontWeight: 700,
+                                                }}
+                                            >
+                                                {c.len > 1 ? c.len : ""}
+                                            </div>
+                                        )
+                                    )}
+                                </div>
                             </div>
                         </>
                     ) : (
