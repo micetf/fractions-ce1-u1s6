@@ -2,40 +2,45 @@
  * @file AtelierCuisenaire — atelier de fractions avec les réglettes Cuisenaire.
  *
  * @description
- * Activité en deux ou trois phases selon le type de situation :
+ * Orchestrateur de la séquence : gère l'état, les handlers et le rendu
+ * de haut niveau. Les sous-composants sont délégués à :
  *
- * **Situations unitaires** (`nonUnit === false`) — 5 situations :
- * 1. **Phase `count`**   — L'élève empile des réglettes pour couvrir la référence.
- * 2. **Phase `name`**    — L'élève nomme la fraction représentée.
- *
- * **Situation non-unitaire** (`nonUnit === true`) — 1 situation (violette) :
- * 1. **Phase `explain`** — L'enseignant·e présente le raisonnement visuel.
- * 2. **Phase `name`**    — L'élève nomme la fraction composée.
- *
- * ────────────────────────────────────────────────────────────────
- * Corrections visuelles (v4)
- * ────────────────────────────────────────────────────────────────
- * - Séparateur adaptatif : clair sur réglettes sombres, sombre sur
- *   réglettes claires (ex : blanche). Calcul via luminance perçue
- *   (coefficients ITU-R BT.601) depuis la valeur hex de `c.bg`.
- * - Bac à fond sombre (#1E293B) : toutes les réglettes ressortent,
- *   y compris la réglette blanche (#F9FAFB).
- * - Bac sans border CSS (box-shadow inset) : la largeur interne
- *   est exactement refLen × UNIT, garantissant l'alignement.
- * - "La partie →" affichée en permanence comme référence.
+ * - DarkRod                : réglette atomique (via RodVisualizer)
+ * - RodVisualizer          : zone de visualisation complète
+ * - CuisenairePhaseCount   : UI manipulation + indice
+ * - CuisenairePhaseName    : UI nommage (unitaire + non-unitaire)
+ * - PhasePredict           : UI anticipation numérique (partagé)
  *
  * ────────────────────────────────────────────────────────────────
- * Invariant géométrique
+ * Flux des phases par type de situation
  * ────────────────────────────────────────────────────────────────
- * Pour toutes les situations unitaires :
- *   n × c.len × UNIT = c.refLen × UNIT
+ *
+ * Situations unitaires (nonUnit === false) :
+ *   predict → count → name
+ *
+ * Situation non-unitaire (nonUnit === true) :
+ *   explain → name
+ *   (pas de predict ni de count — la manipulation est remplacée
+ *   par une décomposition visuelle commentée par l'enseignant·e)
  *
  * ────────────────────────────────────────────────────────────────
  * Scoring
  * ────────────────────────────────────────────────────────────────
- * Situations unitaires   : 2 pts chacune (comptage + nommage)
- * Situation non-unitaire : 1 pt (nommage uniquement)
+ * Situations unitaires   : 2 pts chacune (count + name)
+ * Situation non-unitaire : 1 pt (name uniquement)
  * Total = CUI.length * 2 - 1 = 11 pts
+ *
+ * ────────────────────────────────────────────────────────────────
+ * Note StrictMode
+ * ────────────────────────────────────────────────────────────────
+ * Contrairement à Tangram et Disques, le useEffect réinitialise
+ * explicitement tous les états de situation car Cuisenaire a un
+ * flux de phases conditionnel (nonUnit court-circuite predict/count).
+ * Le risque StrictMode est géré différemment : handlePredict bascule
+ * vers "count" après que le useEffect a établi "predict", donc
+ * le double-invoke ne pose pas de problème ici car la situation
+ * non-unitaire démarre directement en "explain" sans passer par
+ * handlePredict.
  *
  * @see useEventLog
  */
@@ -43,7 +48,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import PropTypes from "prop-types";
 
-import { CUI, UNIT } from "../../data/cuisenaire.js";
+import { CUI } from "../../data/cuisenaire.js";
 import {
     okCountMsg,
     okNameMsg,
@@ -52,449 +57,21 @@ import {
     errName1,
     errName2,
 } from "../../utils/feedback.js";
-import Btn from "../ui/Btn.jsx";
-import Bubble from "../ui/Bubble.jsx";
+
+import PhasePredict from "../ui/PhasePredict.jsx";
 import ProgDots from "../ui/ProgDots.jsx";
 import DoneScreen from "../ui/DoneScreen.jsx";
 import FullModal from "../ui/FullModal.jsx";
+import RodVisualizer from "./cuisenaire/RodVisualizer.jsx";
+import CuisenairePhaseCount from "./cuisenaire/CuisenairePhaseCount.jsx";
+import CuisenairePhaseName from "./cuisenaire/CuisenairePhaseName.jsx";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
 const COLOR = "#B45309";
 const MAX_SCORE = CUI.length * 2 - 1;
 
-/** Couleur de fond du bac : ardoise sombre pour contraste maximal. */
-const BAC_BG = "#1E293B";
-
-// ─── Rod ───────────────────────────────────────────────────────────────────────
-
-/**
- * Réglette Cuisenaire individuelle (composant standalone).
- * Utilisée pour les lignes de référence ("Le tout →", "La partie →").
- *
- * @param {Object}      props
- * @param {number}      props.len   - Longueur en unités
- * @param {string}      props.bg    - Couleur de fond
- * @param {string}      props.bd    - Couleur de bordure
- * @param {string|null} props.label - Label à gauche (null = pas de label)
- */
-function Rod({ len, bg, bd, label }) {
-    return (
-        <div className="flex items-center gap-2">
-            {label !== null && (
-                <span
-                    className="text-xs font-bold text-slate-400 shrink-0"
-                    style={{ width: "80px", textAlign: "right" }}
-                >
-                    {label}
-                </span>
-            )}
-            <div
-                className="rounded-lg flex items-center justify-center font-bold text-xs"
-                style={{
-                    width: `${len * UNIT}px`,
-                    height: "36px",
-                    background: bg,
-                    border: `2px solid ${bd}`,
-                    color: len === 1 ? "#9CA3AF" : "white",
-                    boxShadow: "0 2px 6px rgba(0,0,0,.12)",
-                    flexShrink: 0,
-                }}
-            >
-                {len > 1 ? len : ""}
-            </div>
-        </div>
-    );
-}
-
-Rod.propTypes = {
-    len: PropTypes.number.isRequired,
-    bg: PropTypes.string.isRequired,
-    bd: PropTypes.string.isRequired,
-    label: PropTypes.string,
-};
-
-Rod.defaultProps = { label: null };
-
-// ─── DarkRod ────────────────────────────────────────────────────────────────────
-
-/**
- * Réglette Cuisenaire sur fond ardoise.
- * Utilisée systématiquement pour : le tout, la partie, les parts ajoutées.
- * Le border-radius assure la séparation visuelle entre réglettes adjacentes
- * sans séparateur explicite.
- *
- * @param {Object} props
- * @param {number} props.len - Longueur en unités
- * @param {string} props.bg  - Couleur de fond
- * @param {string} props.bd  - Couleur de bordure
- */
-function DarkRod({ len, bg, bd }) {
-    return (
-        <div
-            style={{
-                width: `${len * UNIT}px`,
-                height: "36px",
-                background: bg,
-                border: `2px solid ${bd}`,
-                borderRadius: "6px",
-                flexShrink: 0,
-            }}
-        />
-    );
-}
-
-DarkRod.propTypes = {
-    len: PropTypes.number.isRequired,
-    bg: PropTypes.string.isRequired,
-    bd: PropTypes.string.isRequired,
-};
-
-// ─── RodVisualizer ─────────────────────────────────────────────────────────────
-
-/**
- * Zone de visualisation des réglettes Cuisenaire.
- *
- * @description
- * Tout l'espace est sur fond ardoise (`#1E293B`), comme une table sombre.
- *
- * Phases `count` et `name` — structure dans le fond ardoise :
- * ```
- * [réglette orange, largeur = refLen × UNIT]
- * [réglettes qui s'accumulent bout à bout, même point de départ gauche]
- * ```
- * Quand placed = n, les réglettes couvrent exactement la même longueur
- * que l'orange : invariant `n × c.len × UNIT = c.refLen × UNIT`.
- *
- * La réglette modèle ("La partie →") est affichée HORS du fond ardoise,
- * dans une bande blanche au-dessus, comme référence manipulable.
- *
- * Phase `explain` — entièrement dans le fond ardoise :
- * orange + violette + décomposition en 2 rouges.
- *
- * ────────────────────────────────────────────────────────────────
- * Séparateur adaptatif
- * ────────────────────────────────────────────────────────────────
- * La couleur du trait de séparation entre réglettes est calculée
- * via `getSeparatorColor(c.bg)` pour garantir la lisibilité quelle
- * que soit la teinte de la réglette (y compris blanche).
- *
- * @param {Object}  props
- * @param {Object}  props.situation - Données de la situation
- * @param {number}  props.placed    - Réglettes posées (0..n)
- * @param {string}  props.phase     - Phase courante ('count'|'name'|'explain')
- */
-// ─── RodVisualizer ─────────────────────────────────────────────────────────────
-
-function RodVisualizer({ situation: c, placed, phase }) {
-    const rodW = c.refLen * UNIT;
-    const minW = rodW + 32;
-
-    return (
-        <div className="rounded-2xl overflow-hidden shadow-sm">
-            {/* ── Bande blanche : réglette modèle "La partie" ── */}
-            {phase !== "explain" && (
-                <div className="bg-white px-4 py-2.5 flex items-center gap-3 border-b border-slate-100">
-                    <span
-                        className="text-xs font-bold text-slate-400 shrink-0"
-                        style={{ width: "72px", textAlign: "right" }}
-                    >
-                        La partie →
-                    </span>
-                    {/* ✅ DarkRod — cohérence avec la zone ardoise */}
-                    <DarkRod len={c.len} bg={c.bg} bd={c.bd} />
-                </div>
-            )}
-
-            {/* ── Fond ardoise ── */}
-            <div
-                style={{
-                    background: BAC_BG,
-                    padding: "16px",
-                    overflowX: "auto",
-                }}
-                aria-label="Zone de comparaison des réglettes"
-            >
-                <div
-                    className="flex flex-col gap-3"
-                    style={{ minWidth: `${minW}px` }}
-                >
-                    {phase !== "explain" ? (
-                        <>
-                            {/* Le tout */}
-                            <div
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "8px",
-                                }}
-                            >
-                                <span
-                                    style={{
-                                        width: "72px",
-                                        textAlign: "right",
-                                        fontSize: "11px",
-                                        fontWeight: 700,
-                                        color: "rgba(255,255,255,0.45)",
-                                        flexShrink: 0,
-                                    }}
-                                >
-                                    Le tout →
-                                </span>
-                                <DarkRod
-                                    len={c.refLen}
-                                    bg={c.refBg}
-                                    bd={c.refBd}
-                                />
-                            </div>
-
-                            {/*
-                                Zone d'accumulation — flex row de DarkRod.
-                                Pas de container overflow:hidden : le border-radius
-                                de chaque DarkRod assure la séparation visuelle.
-                                L'espace vide est implicite par comparaison avec le tout.
-                            */}
-                            <div
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "8px",
-                                }}
-                            >
-                                <span
-                                    style={{ width: "72px", flexShrink: 0 }}
-                                />
-                                {/* spacer */}
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        minHeight: "36px",
-                                    }}
-                                    aria-label={
-                                        placed === 0
-                                            ? "Vide — ajouter des réglettes"
-                                            : `${placed} réglette${placed > 1 ? "s" : ""}`
-                                    }
-                                >
-                                    {Array.from({ length: placed }).map(
-                                        (_, i) => (
-                                            <DarkRod
-                                                key={i}
-                                                len={c.len}
-                                                bg={c.bg}
-                                                bd={c.bd}
-                                            />
-                                        )
-                                    )}
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        /* ── Phase explain ── */
-                        <>
-                            <DarkRod len={c.refLen} bg={c.refBg} bd={c.refBd} />
-                            <DarkRod len={c.len} bg={c.bg} bd={c.bd} />
-
-                            {/* ✅ Pas de gap — border-radius assure la séparation */}
-                            <div style={{ display: "flex" }}>
-                                <DarkRod len={2} bg="#EF4444" bd="#B91C1C" />
-                                <DarkRod len={2} bg="#EF4444" bd="#B91C1C" />
-                            </div>
-
-                            <p
-                                style={{
-                                    color: "rgba(255,255,255,0.45)",
-                                    fontSize: "11px",
-                                    fontWeight: 600,
-                                    marginTop: "2px",
-                                }}
-                            >
-                                La rouge vaut un cinquième de l'orange. Alors la
-                                violette vaut _____ de l'orange.
-                            </p>
-                        </>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-RodVisualizer.propTypes = {
-    situation: PropTypes.shape({
-        len: PropTypes.number.isRequired,
-        bg: PropTypes.string.isRequired,
-        bd: PropTypes.string.isRequired,
-        refLen: PropTypes.number.isRequired,
-        refBg: PropTypes.string.isRequired,
-        refBd: PropTypes.string.isRequired,
-        n: PropTypes.number,
-    }).isRequired,
-    placed: PropTypes.number.isRequired,
-    phase: PropTypes.oneOf(["count", "name", "explain"]).isRequired,
-};
-
-// ─── PhaseCount ────────────────────────────────────────────────────────────────
-
-/**
- * Interface de la phase de comptage pour l'atelier Cuisenaire.
- *
- * @param {Object}   props
- * @param {Object}   props.situation  - Données de la situation
- * @param {number}   props.placed     - Réglettes posées (0..n)
- * @param {boolean}  props.hintShown  - Indice déjà affiché
- * @param {Object}   props.feedback   - { type, msg } | null
- * @param {Function} props.onContinue - Transition vers la phase name
- * @param {Function} props.onAdd      - Ajouter une réglette
- * @param {Function} props.onRemove   - Retirer une réglette
- * @param {Function} props.onHint     - Afficher l'indice
- * @param {Function} props.onValidate - Valider le comptage
- */
-function PhaseCount({
-    situation: c,
-    placed,
-    hintShown,
-    feedback,
-    onContinue,
-    onAdd,
-    onRemove,
-    onHint,
-    onValidate,
-}) {
-    return (
-        <div className="flex flex-col gap-3">
-            <div className="flex gap-3 justify-center">
-                <button
-                    onClick={onAdd}
-                    aria-label="Ajouter une réglette"
-                    className="btn-add flex-1 py-4 rounded-2xl text-2xl font-bold text-white
-                     shadow-md touch-manipulation"
-                    style={{ background: COLOR }}
-                >
-                    ➕ Ajouter
-                </button>
-                <button
-                    onClick={onRemove}
-                    disabled={placed === 0}
-                    aria-label="Retirer la dernière réglette"
-                    className="btn-add py-4 px-5 rounded-2xl text-xl font-bold
-                     bg-white border-2 border-slate-200 text-slate-600 disabled:opacity-30"
-                >
-                    ↩
-                </button>
-            </div>
-
-            {!hintShown && (
-                <button
-                    onClick={onHint}
-                    className="text-xs text-amber-700 underline text-center touch-manipulation py-1"
-                >
-                    Besoin d'un indice ?
-                </button>
-            )}
-            {hintShown && <Bubble type="hint" msg={`💡 ${c.hint}`} />}
-
-            {feedback && (
-                <Bubble
-                    type={feedback.type}
-                    msg={feedback.msg}
-                    onContinue={feedback.type === "ok" ? onContinue : null}
-                />
-            )}
-
-            {feedback?.type !== "ok" && (
-                <button
-                    onClick={onValidate}
-                    className="py-4 rounded-2xl text-lg font-bold text-white shadow-md
-                     hover:brightness-110 active:scale-95 transition-all touch-manipulation"
-                    style={{ background: "#92400E" }}
-                >
-                    ✓ La réglette {c.refName} est couverte !
-                </button>
-            )}
-        </div>
-    );
-}
-
-PhaseCount.propTypes = {
-    situation: PropTypes.shape({
-        bg: PropTypes.string.isRequired,
-        refName: PropTypes.string.isRequired,
-        n: PropTypes.number.isRequired,
-        hint: PropTypes.string.isRequired,
-    }).isRequired,
-    placed: PropTypes.number.isRequired,
-    hintShown: PropTypes.bool.isRequired,
-    feedback: PropTypes.shape({
-        type: PropTypes.string,
-        msg: PropTypes.string,
-    }),
-    onContinue: PropTypes.func.isRequired,
-    onAdd: PropTypes.func.isRequired,
-    onRemove: PropTypes.func.isRequired,
-    onHint: PropTypes.func.isRequired,
-    onValidate: PropTypes.func.isRequired,
-};
-
-PhaseCount.defaultProps = { feedback: null };
-
-// ─── PhaseName ─────────────────────────────────────────────────────────────────
-
-/**
- * Interface de la phase de nommage (situations unitaires et non-unitaire).
- *
- * @param {Object}   props
- * @param {Object}   props.situation  - Données de la situation
- * @param {Object}   props.feedback   - { type, msg } | null
- * @param {Function} props.onContinue - Avancement à la situation suivante
- * @param {Function} props.onSelect   - Callback(option: string)
- */
-function PhaseName({ situation: c, feedback, onContinue, onSelect }) {
-    return (
-        <div className="flex flex-col gap-3">
-            {feedback && (
-                <Bubble
-                    type={feedback.type}
-                    msg={feedback.msg}
-                    onContinue={feedback.type === "ok" ? onContinue : null}
-                />
-            )}
-            <div className="flex flex-wrap gap-3 justify-center">
-                {c.fOpts.map((opt) => {
-                    let v = "idle";
-                    if (feedback && feedback.type === "ok") {
-                        v = opt === c.answer ? "ok" : "off";
-                    }
-                    return (
-                        <Btn
-                            key={opt}
-                            label={opt}
-                            onClick={() => onSelect(opt)}
-                            v={v}
-                        />
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
-PhaseName.propTypes = {
-    situation: PropTypes.shape({
-        fOpts: PropTypes.arrayOf(PropTypes.string).isRequired,
-        answer: PropTypes.string.isRequired,
-    }).isRequired,
-    feedback: PropTypes.shape({
-        type: PropTypes.string,
-        msg: PropTypes.string,
-    }),
-    onContinue: PropTypes.func.isRequired,
-    onSelect: PropTypes.func.isRequired,
-};
-
-PhaseName.defaultProps = { feedback: null };
-
-// ─── Composant principal ────────────────────────────────────────────────────────
+// ─── Composant ─────────────────────────────────────────────────────────────────
 
 /**
  * Atelier Cuisenaire — séquence de 6 situations de fractions des réglettes.
@@ -505,7 +82,8 @@ PhaseName.defaultProps = { feedback: null };
 export default function AtelierCuisenaire({ log }) {
     const [idx, setIdx] = useState(0);
     const [placed, setPlaced] = useState(0);
-    const [phase, setPhase] = useState("count");
+    const [phase, setPhase] = useState("predict");
+    const [predicted, setPredicted] = useState(null);
     const [feedback, setFeedback] = useState(null);
     const [locked, setLocked] = useState(false);
     const [showFullModal, setShowFullModal] = useState(false);
@@ -519,16 +97,27 @@ export default function AtelierCuisenaire({ log }) {
 
     const c = CUI[idx];
 
+    // ── Cycle de vie situation ───────────────────────────────────────────────────
+
+    /*
+     * Cuisenaire réinitialise tous les états dans useEffect (contrairement
+     * à Tangram/Disques) car le flux de phases est conditionnel :
+     * - nonUnit → démarre en "explain" (pas de predict ni count)
+     * - unitaire → démarre en "predict"
+     * Le double-invoke StrictMode ne pose pas de problème ici car
+     * handlePredict n'est jamais appelé sur une situation nonUnit.
+     */
     useEffect(() => {
         sitStart.current = Date.now();
         countErrCount.current = 0;
         setHintShown(false);
         setPlaced(0);
+        setPhase(c.nonUnit ? "explain" : "predict");
+        setPredicted(null);
         setFeedback(null);
         setLocked(false);
         setNameErr(0);
         setShowFullModal(false);
-        setPhase(c.nonUnit ? "explain" : "count");
         log("SIT_START", {
             idx,
             id: `cu${idx}`,
@@ -537,16 +126,21 @@ export default function AtelierCuisenaire({ log }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [idx]);
 
+    // ── Reset complet ────────────────────────────────────────────────────────────
+
     const reset = useCallback(() => {
         setIdx(0);
         setScore(0);
         setDone(false);
+        // Les autres états seront réinitialisés par le useEffect au changement d'idx
     }, []);
+
+    // ── Avancement situation ─────────────────────────────────────────────────────
 
     const doAdvance = useCallback(
         (finalNameErr) => {
             const dur = Date.now() - sitStart.current;
-            const fullScore =
+            const isFullScore =
                 (c.nonUnit || countErrCount.current === 0) &&
                 finalNameErr === 0;
 
@@ -555,24 +149,53 @@ export default function AtelierCuisenaire({ log }) {
                 label: `${c.name} / ${c.refName}`,
                 n: c.n,
                 answer: c.answer,
+                predictCorrect: c.nonUnit ? null : predicted === c.n,
                 countErrors: c.nonUnit ? null : countErrCount.current,
                 nameErrors: finalNameErr,
                 durationMs: dur,
                 hintUsed: hintShown,
-                fullScore,
+                fullScore: isFullScore,
             });
 
             const next = idx + 1;
-            if (next < CUI.length) setIdx(next);
-            else {
+            if (next < CUI.length) {
+                setIdx(next);
+                // Tous les autres états réinitialisés par useEffect
+            } else {
                 setDone(true);
-                log("ATELIER_DONE", { maxScore: MAX_SCORE, durationMs: dur });
+                log("ATELIER_DONE", {
+                    totalScore: score,
+                    maxScore: MAX_SCORE,
+                    durationMs: dur,
+                });
             }
         },
-        [idx, c, hintShown, log]
+        [idx, c, score, predicted, hintShown, log]
     );
 
-    // ── Handlers COUNT ──────────────────────────────────────────────────────────
+    // ── Handler PREDICT ──────────────────────────────────────────────────────────
+
+    /**
+     * Enregistre la prédiction et bascule en phase count.
+     * Uniquement pour les situations unitaires.
+     *
+     * @param {number} value - Valeur choisie (1–10)
+     */
+    const handlePredict = useCallback(
+        (value) => {
+            setPredicted(value);
+            log("PREDICT", {
+                idx,
+                predicted: value,
+                actual: c.n,
+                correct: value === c.n,
+            });
+            setPhase("count");
+        },
+        [idx, c.n, log]
+    );
+
+    // ── Handlers COUNT ───────────────────────────────────────────────────────────
 
     /** Ajouter : modale si la réglette de référence est déjà couverte. */
     const handleAdd = useCallback(() => {
@@ -594,18 +217,39 @@ export default function AtelierCuisenaire({ log }) {
         log("HINT_USED", { idx });
     }, [idx, log]);
 
+    /**
+     * Valide le comptage et construit le feedback en intégrant la
+     * correction de prédiction.
+     *
+     * Cas ok/warn (manipulation réussie) :
+     * - predicted === null  → message générique (okCountMsg)
+     * - predicted === c.n   → confirmation + félicitation (ok)
+     * - predicted !== c.n   → correction sans pénalité (warn)
+     */
     const handleValidateCount = useCallback(() => {
         if (placed === c.n) {
             setScore((s) => s + 1);
             log("COUNT_OK", { idx, countErrors: countErrCount.current });
-            setFeedback({
-                type: "ok",
-                msg: okCountMsg(
+
+            let msg;
+            let type;
+
+            if (predicted === null) {
+                msg = okCountMsg(
                     c.n,
                     `réglette ${c.name}`,
                     `réglette ${c.refName}`
-                ),
-            });
+                );
+                type = "ok";
+            } else if (predicted === c.n) {
+                msg = `Tu avais prédit ${c.n} — c'est exact ! Maintenant, nomme la fraction.`;
+                type = "ok";
+            } else {
+                msg = `Tu avais dit ${predicted}, mais en ajoutant tu as trouvé ${c.n}. C'est ça qui compte !`;
+                type = "warn";
+            }
+
+            setFeedback({ type, msg });
         } else {
             countErrCount.current++;
             log("COUNT_ERR", { idx, placed, expected: c.n });
@@ -617,9 +261,9 @@ export default function AtelierCuisenaire({ log }) {
                         : errCountMany(placed, c.n),
             });
         }
-    }, [placed, c, idx, log]);
+    }, [placed, c, idx, predicted, log]);
 
-    // ── Handlers NAME ────────────────────────────────────────────────────────────
+    // ── Handlers NAME ─────────────────────────────────────────────────────────────
 
     const handleSelectName = useCallback(
         (opt) => {
@@ -664,7 +308,7 @@ export default function AtelierCuisenaire({ log }) {
         [locked, c, nameErr, idx, log]
     );
 
-    // ── Callbacks de continuation ────────────────────────────────────────────────
+    // ── Continuations ─────────────────────────────────────────────────────────────
 
     const handleCountContinue = useCallback(() => {
         setPhase("name");
@@ -675,7 +319,7 @@ export default function AtelierCuisenaire({ log }) {
         doAdvance(nameErr);
     }, [doAdvance, nameErr]);
 
-    // ── Rendu ────────────────────────────────────────────────────────────────────
+    // ── Rendu ─────────────────────────────────────────────────────────────────────
 
     if (done) {
         return (
@@ -689,12 +333,14 @@ export default function AtelierCuisenaire({ log }) {
         );
     }
 
+    const isPredict = phase === "predict";
     const isCount = phase === "count";
-    const isNaming = phase === "name" || phase === "explain";
+    const isExplain = phase === "explain";
+    const isNaming = phase === "name";
 
     return (
         <div className="flex flex-col gap-4">
-            {/* Progression */}
+            {/* ── Progression ── */}
             <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                     {idx + 1}/{CUI.length}
@@ -702,52 +348,108 @@ export default function AtelierCuisenaire({ log }) {
                 <ProgDots done={score} total={MAX_SCORE} color={COLOR} />
             </div>
 
-            {/* Consigne */}
-            <div
-                className="bg-amber-50 border border-amber-100 rounded-2xl p-3
-                      text-center text-lg font-bold text-amber-900 leading-snug"
-            >
-                {isCount && (
-                    <>
-                        Combien de réglettes{" "}
-                        <em
-                            className="not-italic font-extrabold"
-                            style={{
-                                color: c.bg === "#F9FAFB" ? "#6B7280" : c.bg,
-                            }}
-                        >
-                            {c.name}
-                        </em>{" "}
-                        faut-il pour couvrir la réglette{" "}
-                        <em
-                            className="not-italic font-extrabold"
-                            style={{ color: c.refBg }}
-                        >
-                            {c.refName}
-                        </em>{" "}
-                        ?
-                    </>
-                )}
-                {phase === "name" && (
-                    <>
-                        La réglette {c.name} représente _____ de la réglette{" "}
-                        {c.refName}.
-                    </>
-                )}
-                {phase === "explain" && (
-                    <>
-                        ★ Défi — La réglette violette représente _____ de la
-                        réglette orange.
-                    </>
-                )}
-            </div>
+            {/* ── Consigne — count, name et explain uniquement.
+                   Phase predict : PhasePredict porte sa consigne via prop. ── */}
+            {!isPredict && (
+                <div
+                    className="bg-amber-50 border border-amber-100 rounded-2xl p-3
+                               text-center text-lg font-bold text-amber-900 leading-snug"
+                >
+                    {isCount && (
+                        <>
+                            Vérifie en ajoutant les réglettes{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{
+                                    color:
+                                        c.bg === "#F9FAFB" ? "#6B7280" : c.bg,
+                                }}
+                            >
+                                {c.name}
+                            </em>{" "}
+                            une à une.
+                        </>
+                    )}
+                    {isNaming && (
+                        <>
+                            La réglette{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{
+                                    color:
+                                        c.bg === "#F9FAFB" ? "#6B7280" : c.bg,
+                                }}
+                            >
+                                {c.name}
+                            </em>{" "}
+                            représente _____ de la réglette{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{ color: c.refBg }}
+                            >
+                                {c.refName}
+                            </em>
+                            .
+                        </>
+                    )}
+                    {isExplain && (
+                        <>
+                            ★ Défi — La réglette{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{ color: c.bg }}
+                            >
+                                violette
+                            </em>{" "}
+                            représente _____ de la réglette{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{ color: c.refBg }}
+                            >
+                                orange
+                            </em>
+                            .
+                        </>
+                    )}
+                </div>
+            )}
 
-            {/* Visualisation réglettes */}
+            {/* ── Visualisation réglettes ── */}
             <RodVisualizer situation={c} placed={placed} phase={phase} />
 
-            {/* Phase active */}
+            {/* ── Phase active ── */}
+
+            {isPredict && (
+                <PhasePredict
+                    consigne={
+                        <>
+                            Combien de réglettes{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{
+                                    color:
+                                        c.bg === "#F9FAFB" ? "#6B7280" : c.bg,
+                                }}
+                            >
+                                {c.name}
+                            </em>{" "}
+                            faut-il pour couvrir la réglette{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{ color: c.refBg }}
+                            >
+                                {c.refName}
+                            </em>{" "}
+                            ?
+                        </>
+                    }
+                    onPredict={handlePredict}
+                    color={COLOR}
+                />
+            )}
+
             {isCount && (
-                <PhaseCount
+                <CuisenairePhaseCount
                     situation={c}
                     placed={placed}
                     hintShown={hintShown}
@@ -759,8 +461,9 @@ export default function AtelierCuisenaire({ log }) {
                     onValidate={handleValidateCount}
                 />
             )}
-            {isNaming && (
-                <PhaseName
+
+            {(isNaming || isExplain) && (
+                <CuisenairePhaseName
                     situation={c}
                     feedback={feedback}
                     onContinue={handleNameContinue}
@@ -768,7 +471,7 @@ export default function AtelierCuisenaire({ log }) {
                 />
             )}
 
-            {/* Modale "réglette déjà couverte" */}
+            {/* ── Modale "réglette déjà couverte" ── */}
             {showFullModal && (
                 <FullModal
                     message={`La réglette ${c.refName} est déjà couverte ! Il n'est plus nécessaire d'ajouter.`}
