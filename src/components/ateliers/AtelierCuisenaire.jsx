@@ -169,19 +169,8 @@ function DarkRod({ len, bg, bd }) {
                 border: `2px solid ${bd}`,
                 borderRadius: "6px",
                 flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color:
-                    len === 1
-                        ? "rgba(255,255,255,0.4)"
-                        : "rgba(255,255,255,0.9)",
-                fontSize: "11px",
-                fontWeight: 700,
             }}
-        >
-            {len > 1 ? len : ""}
-        </div>
+        />
     );
 }
 
@@ -335,25 +324,13 @@ function RodVisualizer({ situation: c, placed, phase }) {
                                                     width: `${c.len * UNIT}px`,
                                                     height: "100%",
                                                     background: c.bg,
-                                                    /* ✅ séparateur adapté à la luminance du fond */
                                                     borderRight:
                                                         i < placed - 1
                                                             ? `1px solid ${separatorColor}`
                                                             : "none",
                                                     flexShrink: 0,
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                    color:
-                                                        c.len === 1
-                                                            ? "rgba(255,255,255,0.4)"
-                                                            : "rgba(255,255,255,0.9)",
-                                                    fontSize: "11px",
-                                                    fontWeight: 700,
                                                 }}
-                                            >
-                                                {c.len > 1 ? c.len : ""}
-                                            </div>
+                                            />
                                         )
                                     )}
                                 </div>
