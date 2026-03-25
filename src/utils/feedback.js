@@ -86,10 +86,14 @@ export const okCountMsg = (n, p, t) => {
  * @returns {string}
  */
 export const okNameMsg = (n, p, t, f) => {
-    const genre = (s) => {
-        return s.includes("carré") || s.includes("disque") ? "le" : "la";
+    const genre = (s, u = false) => {
+        const l = u ? "L" : "l";
+        return s.includes("carré") || s.includes("disque") ? `${l}e` : `${l}a`;
     };
-    return `Il faut ${n} ${n > 1 ? pluriel(p) : p} pour faire ${genre(t)} ${t} → c'est «${f}».`;
+    const de = (s) => {
+        return s.includes("carré") || s.includes("disque") ? `du` : `de la`;
+    };
+    return `Il faut ${n} ${n > 1 ? pluriel(p) : p} pour faire ${genre(t)} ${t}. ${genre(p, true)} ${p} représente «${f}» ${de(t)} ${t}.`;
 };
 
 /**

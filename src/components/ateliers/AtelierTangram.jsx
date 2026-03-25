@@ -2,26 +2,43 @@
  * @file AtelierTangram — atelier de fractions avec les pièces du Tangram.
  *
  * @description
- * Activité en deux phases enchaînées pour chaque situation :
+ * Orchestrateur de la séquence : gère l'état, les handlers et le rendu
+ * de haut niveau. Les sous-composants sont délégués à :
  *
- * 1. **Phase `count`** — Le carré commence vide. L'élève ajoute des pièces une
- *    à une jusqu'à le remplir entièrement, puis valide. Une pièce de référence
- *    (toujours visible) rappelle la pièce à manipuler.
- *
- * 2. **Phase `name`**  — L'élève choisit parmi 4 options le nom de la fraction
- *    que représente la pièce de référence.
+ * - TangramSVG          : rendu SVG du carré
+ * - TangramPhaseCount   : UI de vérification par manipulation
+ * - TangramPhaseName    : UI de nommage de la fraction
+ * - PhasePredict        : UI d'anticipation numérique (partagé)
  *
  * ────────────────────────────────────────────────────────────────
- * Modèle de remplissage
+ * Flux des phases par situation
  * ────────────────────────────────────────────────────────────────
- * `placed` va de 0 (carré vide) à s.n (carré plein).
- * Ordre : position « active » en premier, puis chaque ghost.
- * Tenter d'ajouter quand placed === s.n → FullModal.
+ *
+ *   predict → count → name
+ *
+ * 1. **predict** — L'élève anticipe le nombre de pièces nécessaires
+ *    (boutons 1–10). Aucun feedback immédiat. La consigne est portée
+ *    par PhasePredict via la prop `consigne`.
+ *
+ * 2. **count**   — L'élève vérifie par manipulation. Le feedback
+ *    intègre la correction de prédiction :
+ *    - `ok`   : prédiction juste ou absente
+ *    - `warn` : manipulation réussie, prédiction inexacte
+ *
+ * 3. **name**    — L'élève nomme la fraction parmi 4 options.
  *
  * ────────────────────────────────────────────────────────────────
  * Scoring
  * ────────────────────────────────────────────────────────────────
- * +1 point par phase réussie (max 2 points/situation = 10 points).
+ * +1 par phase réussie — max 2 pts/situation = 10 pts total.
+ *
+ * ────────────────────────────────────────────────────────────────
+ * Note StrictMode
+ * ────────────────────────────────────────────────────────────────
+ * `setPhase` et `setPredicted` sont intentionnellement absents du
+ * useEffect pour éviter que le double-invoke de StrictMode en
+ * développement ne remette phase à "predict" après que handlePredict
+ * l'ait basculée à "count". Ils sont réinitialisés dans doAdvance.
  *
  * @see useEventLog
  */
@@ -39,230 +56,21 @@ import {
     errName2,
     pluriel,
 } from "../../utils/feedback.js";
-import Btn from "../ui/Btn.jsx";
-import Bubble from "../ui/Bubble.jsx";
+
+import PhasePredict from "../ui/PhasePredict.jsx";
 import ProgDots from "../ui/ProgDots.jsx";
 import DoneScreen from "../ui/DoneScreen.jsx";
 import FullModal from "../ui/FullModal.jsx";
+import TangramSVG from "./tangram/TangramSVG.jsx";
+import TangramPhaseCount from "./tangram/TangramPhaseCount.jsx";
+import TangramPhaseName from "./tangram/TangramPhaseName.jsx";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
 const COLOR = "#2563EB";
 const MAX_SCORE = TG.length * 2;
 
-// ─── TangramSVG ────────────────────────────────────────────────────────────────
-
-/**
- * Carré Tangram progressivement rempli.
- *
- * placed=0 → carré vide (fantômes très atténués).
- * placed=s.n → carré entièrement rempli.
- * Ordre de remplissage : [active, ...ghosts].
- *
- * @param {{ situation: Object, placed: number }} props
- */
-function TangramSVG({ situation: s, placed, size = 200 }) {
-    const allPieces = [s.active, ...s.ghosts]; // longueur = s.n
-
-    return (
-        <svg
-            viewBox="0 0 200 200"
-            aria-label={`Carré Tangram — ${placed} pièce${placed > 1 ? "s" : ""} posée${placed > 1 ? "s" : ""}`}
-            style={{
-                width: `${size}px`,
-                height: `${size}px`,
-                filter: "drop-shadow(0 4px 14px rgba(0,0,0,.12))",
-            }}
-        >
-            <rect
-                x="10"
-                y="10"
-                width="180"
-                height="180"
-                fill="#F8FAFC"
-                rx="2"
-            />
-
-            {allPieces.map((pts, i) => (
-                <polygon
-                    key={i}
-                    points={pts}
-                    fill={i < placed ? s.color : s.ghostC}
-                    opacity={i < placed ? 0.85 : 0.12}
-                    stroke="white"
-                    strokeWidth="1.5"
-                />
-            ))}
-
-            <rect
-                x="10"
-                y="10"
-                width="180"
-                height="180"
-                fill="none"
-                stroke="#CBD5E1"
-                strokeWidth="2"
-                rx="2"
-            />
-        </svg>
-    );
-}
-
-TangramSVG.propTypes = {
-    situation: PropTypes.shape({
-        color: PropTypes.string.isRequired,
-        ghostC: PropTypes.string.isRequired,
-        active: PropTypes.string.isRequired,
-        ghosts: PropTypes.arrayOf(PropTypes.string).isRequired,
-    }).isRequired,
-    placed: PropTypes.number.isRequired,
-    size: PropTypes.number,
-};
-
-// ─── PhaseCount ────────────────────────────────────────────────────────────────
-
-/**
- * Interface de la phase de comptage.
- *
- * @param {Object}   props
- * @param {Object}   props.situation  - Données de la situation
- * @param {number}   props.placed     - Pièces placées (0..s.n)
- * @param {Object}   props.feedback   - { type, msg } | null
- * @param {Function} props.onContinue - Transition vers la phase name
- * @param {Function} props.onAdd      - Ajouter une pièce
- * @param {Function} props.onRemove   - Retirer une pièce
- * @param {Function} props.onValidate - Valider le comptage
- */
-function PhaseCount({
-    situation: s,
-    placed,
-    feedback,
-    onContinue,
-    onAdd,
-    onRemove,
-    onValidate,
-}) {
-    return (
-        <div className="flex flex-col gap-3">
-            <div className="flex gap-3 justify-center">
-                <button
-                    onClick={onAdd}
-                    aria-label="Ajouter une pièce"
-                    className="btn-add flex-1 py-4 rounded-2xl text-2xl font-bold text-white
-                     shadow-md touch-manipulation"
-                    style={{ background: s.color }}
-                >
-                    ➕ Ajouter
-                </button>
-                <button
-                    onClick={onRemove}
-                    disabled={placed === 0}
-                    aria-label="Retirer la dernière pièce"
-                    className="btn-add py-4 px-5 rounded-2xl text-xl font-bold
-                     bg-white border-2 border-slate-200 text-slate-600 disabled:opacity-30"
-                >
-                    ↩
-                </button>
-            </div>
-
-            {feedback && (
-                <Bubble
-                    type={feedback.type}
-                    msg={feedback.msg}
-                    onContinue={feedback.type === "ok" ? onContinue : null}
-                />
-            )}
-
-            {feedback?.type !== "ok" && (
-                <button
-                    onClick={onValidate}
-                    className="py-4 rounded-2xl text-lg font-bold text-white shadow-md
-                     hover:brightness-110 active:scale-95 transition-all touch-manipulation"
-                    style={{ background: "#1E40AF" }}
-                >
-                    ✓ Le {s.tout} est rempli !
-                </button>
-            )}
-        </div>
-    );
-}
-
-PhaseCount.propTypes = {
-    situation: PropTypes.shape({
-        color: PropTypes.string.isRequired,
-        tout: PropTypes.string.isRequired,
-    }).isRequired,
-    placed: PropTypes.number.isRequired,
-    feedback: PropTypes.shape({
-        type: PropTypes.oneOf(["ok", "err", "hint"]).isRequired,
-        msg: PropTypes.string.isRequired,
-    }),
-    onContinue: PropTypes.func.isRequired,
-    onAdd: PropTypes.func.isRequired,
-    onRemove: PropTypes.func.isRequired,
-    onValidate: PropTypes.func.isRequired,
-};
-
-PhaseCount.defaultProps = { feedback: null };
-
-// ─── PhaseName ─────────────────────────────────────────────────────────────────
-
-/**
- * Interface de la phase de nommage.
- *
- * @param {Object}   props
- * @param {Object}   props.situation  - Données de la situation
- * @param {Object}   props.feedback   - { type, msg } | null
- * @param {Function} props.onContinue - Avancement à la situation suivante
- * @param {Function} props.onSelect   - Callback(option: string)
- */
-function PhaseName({ situation: s, feedback, onContinue, onSelect }) {
-    return (
-        <div className="flex flex-col gap-3">
-            {feedback && (
-                <Bubble
-                    type={feedback.type}
-                    msg={feedback.msg}
-                    onContinue={feedback.type === "ok" ? onContinue : null}
-                />
-            )}
-
-            <div className="flex flex-wrap gap-3 justify-center">
-                {s.fOpts.map((opt) => {
-                    let v = "idle";
-                    if (feedback && feedback.type === "ok") {
-                        v = opt === s.answer ? "ok" : "off";
-                    }
-                    return (
-                        <Btn
-                            key={opt}
-                            label={opt}
-                            onClick={() => onSelect(opt)}
-                            v={v}
-                        />
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
-PhaseName.propTypes = {
-    situation: PropTypes.shape({
-        fOpts: PropTypes.arrayOf(PropTypes.string).isRequired,
-        answer: PropTypes.string.isRequired,
-    }).isRequired,
-    feedback: PropTypes.shape({
-        type: PropTypes.oneOf(["ok", "err", "hint"]).isRequired,
-        msg: PropTypes.string.isRequired,
-    }),
-    onContinue: PropTypes.func.isRequired,
-    onSelect: PropTypes.func.isRequired,
-};
-
-PhaseName.defaultProps = { feedback: null };
-
-// ─── Composant principal ────────────────────────────────────────────────────────
+// ─── Composant ─────────────────────────────────────────────────────────────────
 
 /**
  * Atelier Tangram — séquence de 5 situations de fractions du carré.
@@ -273,7 +81,8 @@ PhaseName.defaultProps = { feedback: null };
 export default function AtelierTangram({ log }) {
     const [idx, setIdx] = useState(0);
     const [placed, setPlaced] = useState(0);
-    const [phase, setPhase] = useState("count");
+    const [phase, setPhase] = useState("predict");
+    const [predicted, setPredicted] = useState(null);
     const [feedback, setFeedback] = useState(null);
     const [locked, setLocked] = useState(false);
     const [showFullModal, setShowFullModal] = useState(false);
@@ -286,17 +95,23 @@ export default function AtelierTangram({ log }) {
 
     const s = TG[idx];
 
+    // ── Cycle de vie situation ───────────────────────────────────────────────────
+
     useEffect(() => {
         sitStart.current = Date.now();
         countErrCount.current = 0;
         log("SIT_START", { idx, id: s.id, label: s.label });
+        // phase et predicted réinitialisés dans doAdvance — voir note StrictMode
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [idx]);
+
+    // ── Reset complet ────────────────────────────────────────────────────────────
 
     const reset = useCallback(() => {
         setIdx(0);
         setPlaced(0);
-        setPhase("count");
+        setPhase("predict");
+        setPredicted(null);
         setFeedback(null);
         setLocked(false);
         setShowFullModal(false);
@@ -304,6 +119,8 @@ export default function AtelierTangram({ log }) {
         setScore(0);
         setDone(false);
     }, []);
+
+    // ── Avancement situation ─────────────────────────────────────────────────────
 
     const doAdvance = useCallback(
         (finalNameErr) => {
@@ -316,6 +133,7 @@ export default function AtelierTangram({ log }) {
                 label: s.label,
                 n: s.n,
                 answer: s.answer,
+                predictCorrect: predicted === s.n,
                 countErrors: countErrCount.current,
                 nameErrors: finalNameErr,
                 durationMs: dur,
@@ -326,7 +144,8 @@ export default function AtelierTangram({ log }) {
             if (next < TG.length) {
                 setIdx(next);
                 setPlaced(0);
-                setPhase("count");
+                setPhase("predict"); // réinitialisation explicite — pas dans useEffect
+                setPredicted(null); // réinitialisation explicite — pas dans useEffect
                 setFeedback(null);
                 setLocked(false);
                 setNameErr(0);
@@ -339,12 +158,33 @@ export default function AtelierTangram({ log }) {
                 });
             }
         },
-        [idx, s, score, log]
+        [idx, s, score, predicted, log]
     );
 
-    // ── Handlers COUNT ──────────────────────────────────────────────────────────
+    // ── Handler PREDICT ──────────────────────────────────────────────────────────
 
-    /** Ajouter : déclenche la modale si le carré est déjà plein. */
+    /**
+     * Enregistre la prédiction et bascule en phase count.
+     * Aucun feedback : la phase count est l'unique source de vérité.
+     *
+     * @param {number} value - Valeur choisie (1–10)
+     */
+    const handlePredict = useCallback(
+        (value) => {
+            setPredicted(value);
+            log("PREDICT", {
+                idx,
+                predicted: value,
+                actual: s.n,
+                correct: value === s.n,
+            });
+            setPhase("count");
+        },
+        [idx, s.n, log]
+    );
+
+    // ── Handlers COUNT ───────────────────────────────────────────────────────────
+
     const handleAdd = useCallback(() => {
         if (placed >= s.n) {
             setShowFullModal(true);
@@ -359,14 +199,35 @@ export default function AtelierTangram({ log }) {
         setFeedback(null);
     }, []);
 
+    /**
+     * Valide le comptage et construit le feedback en intégrant la
+     * correction de prédiction.
+     *
+     * Cas ok/warn (manipulation réussie) :
+     * - predicted === null  → message générique (okCountMsg)
+     * - predicted === s.n   → confirmation + félicitation (ok)
+     * - predicted !== s.n   → correction sans pénalité (warn)
+     */
     const handleValidateCount = useCallback(() => {
         if (placed === s.n) {
             setScore((sc) => sc + 1);
             log("COUNT_OK", { idx, countErrors: countErrCount.current });
-            setFeedback({
-                type: "ok",
-                msg: okCountMsg(s.n, s.pieceLabel, s.tout),
-            });
+
+            let msg;
+            let type;
+
+            if (predicted === null) {
+                msg = okCountMsg(s.n, s.pieceLabel, s.tout);
+                type = "ok";
+            } else if (predicted === s.n) {
+                msg = `Tu avais prédit ${s.n} — c'est exact ! Maintenant, nomme la fraction.`;
+                type = "ok";
+            } else {
+                msg = `Tu avais dit ${predicted}, mais en ajoutant tu as trouvé ${s.n}. C'est ça qui compte ! Maintenant, nomme la fraction.`;
+                type = "warn";
+            }
+
+            setFeedback({ type, msg });
         } else if (placed < s.n) {
             countErrCount.current++;
             log("COUNT_ERR", { idx, placed, expected: s.n });
@@ -376,9 +237,9 @@ export default function AtelierTangram({ log }) {
             log("COUNT_ERR", { idx, placed, expected: s.n });
             setFeedback({ type: "err", msg: errCountMany(placed, s.n) });
         }
-    }, [placed, s, idx, log]);
+    }, [placed, s, idx, predicted, log]);
 
-    // ── Handlers NAME ────────────────────────────────────────────────────────────
+    // ── Handlers NAME ─────────────────────────────────────────────────────────────
 
     const handleSelectName = useCallback(
         (opt) => {
@@ -413,7 +274,7 @@ export default function AtelierTangram({ log }) {
         [locked, s, nameErr, idx, log]
     );
 
-    // ── Callbacks de continuation ────────────────────────────────────────────────
+    // ── Continuations ─────────────────────────────────────────────────────────────
 
     const handleCountContinue = useCallback(() => {
         setPhase("name");
@@ -424,7 +285,7 @@ export default function AtelierTangram({ log }) {
         doAdvance(nameErr);
     }, [doAdvance, nameErr]);
 
-    // ── Rendu ────────────────────────────────────────────────────────────────────
+    // ── Rendu ─────────────────────────────────────────────────────────────────────
 
     if (done) {
         return (
@@ -438,11 +299,12 @@ export default function AtelierTangram({ log }) {
         );
     }
 
+    const isPredict = phase === "predict";
     const isCount = phase === "count";
 
     return (
         <div className="flex flex-col gap-4">
-            {/* Progression */}
+            {/* ── Progression ── */}
             <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                     {idx + 1}/{TG.length}
@@ -450,37 +312,40 @@ export default function AtelierTangram({ log }) {
                 <ProgDots done={score} total={MAX_SCORE} color={COLOR} />
             </div>
 
-            {/* Consigne */}
-            <div
-                className="bg-blue-50 border border-blue-100 rounded-2xl p-3
-                      text-center text-lg font-bold text-blue-900 leading-snug"
-            >
-                {isCount ? (
-                    <>
-                        Combien de{" "}
-                        <em
-                            className="not-italic font-extrabold"
-                            style={{ color: s.color }}
-                        >
-                            {pluriel(s.pieceLabel)}
-                        </em>{" "}
-                        faut-il pour remplir le {s.tout} ?
-                    </>
-                ) : (
-                    <>
-                        Ce {s.pieceLabel} représente _____ du {s.tout}.
-                    </>
-                )}
-            </div>
+            {/* ── Consigne — count et name uniquement.
+                   Phase predict : PhasePredict porte sa consigne via prop. ── */}
+            {!isPredict && (
+                <div
+                    className="bg-blue-50 border border-blue-100 rounded-2xl p-3
+                               text-center text-lg font-bold text-blue-900 leading-snug"
+                >
+                    {isCount ? (
+                        <>
+                            Vérifie en ajoutant les{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{ color: s.color }}
+                            >
+                                {pluriel(s.pieceLabel)}
+                            </em>{" "}
+                            une à une.
+                        </>
+                    ) : (
+                        <>
+                            Ce {s.pieceLabel} représente _____ du {s.tout}.
+                        </>
+                    )}
+                </div>
+            )}
 
-            {/* ── Visualisation : tout à couvrir + modèle de la part, même échelle ── */}
+            {/* ── Visualisation : tout + modèle de la part ── */}
             {/*
-        Les deux SVGs partagent viewBox="0 0 200 200" et size=150px CSS.
-        150 + 150 + gap ≈ 316px → tient sur un écran 375px.
-        La part est tournée de s.rot° autour du centre (100,100) pour briser
-        toute orientation prototypique. Le viewBox élargi "-20 -20 240 240"
-        sur le modèle évite le clipping des coins lors de la rotation.
-      */}
+                Les deux SVGs partagent viewBox="0 0 200 200" et size=150px CSS.
+                150 + 150 + gap ≈ 316px → tient sur un écran 375px.
+                La part est tournée de s.rot° autour du centre (100,100) pour
+                briser toute orientation prototypique. Le viewBox élargi
+                "-20 -20 240 240" évite le clipping des coins lors de la rotation.
+            */}
             <div className="flex items-end justify-center gap-4">
                 {/* Le tout : carré à remplir progressivement */}
                 <div className="flex flex-col items-center gap-1">
@@ -490,7 +355,7 @@ export default function AtelierTangram({ log }) {
                     </span>
                 </div>
 
-                {/* Le modèle de la part : même taille CSS, rotation non-prototypique */}
+                {/* Le modèle de la part — rotation non-prototypique */}
                 <div className="flex flex-col items-center gap-1">
                     <svg
                         viewBox="-20 -20 240 240"
@@ -519,9 +384,29 @@ export default function AtelierTangram({ log }) {
                 </div>
             </div>
 
-            {/* Phase active */}
-            {isCount ? (
-                <PhaseCount
+            {/* ── Phase active ── */}
+
+            {isPredict && (
+                <PhasePredict
+                    consigne={
+                        <>
+                            Combien de{" "}
+                            <em
+                                className="not-italic font-extrabold"
+                                style={{ color: s.color }}
+                            >
+                                {pluriel(s.pieceLabel)}
+                            </em>{" "}
+                            faut-il pour remplir le {s.tout} ?
+                        </>
+                    }
+                    onPredict={handlePredict}
+                    color={s.color}
+                />
+            )}
+
+            {isCount && (
+                <TangramPhaseCount
                     situation={s}
                     placed={placed}
                     feedback={feedback}
@@ -530,8 +415,10 @@ export default function AtelierTangram({ log }) {
                     onRemove={handleRemove}
                     onValidate={handleValidateCount}
                 />
-            ) : (
-                <PhaseName
+            )}
+
+            {!isPredict && !isCount && (
+                <TangramPhaseName
                     situation={s}
                     feedback={feedback}
                     onContinue={handleNameContinue}
@@ -539,7 +426,7 @@ export default function AtelierTangram({ log }) {
                 />
             )}
 
-            {/* Modale "carré déjà rempli" */}
+            {/* ── Modale "carré déjà rempli" ── */}
             {showFullModal && (
                 <FullModal
                     message={`Le ${s.tout} est déjà rempli ! Il n'est plus nécessaire d'ajouter.`}

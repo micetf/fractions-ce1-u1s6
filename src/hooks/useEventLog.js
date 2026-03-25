@@ -13,13 +13,15 @@
  * | Type          | Données caractéristiques                              |
  * |---------------|-------------------------------------------------------|
  * | SIT_START     | { idx, id, label }                                    |
+ * | PREDICT       | { idx, predicted, actual, correct }                   |
  * | COUNT_ERR     | { idx, placed, expected }                             |
  * | COUNT_OK      | { idx, countErrors }                                  |
  * | NAME_ERR      | { idx, chosen, answer, errN }                         |
  * | NAME_OK       | { idx, nameErrors }                                   |
  * | HINT_USED     | { idx }                                               |
- * | SIT_DONE      | { idx, label, n, answer, countErrors, nameErrors,     |
- * |               |   durationMs, hintUsed?, fullScore }                  |
+ * | SIT_DONE      | { idx, label, n, answer, predictCorrect,              |
+ * |               |   countErrors, nameErrors, durationMs,                |
+ * |               |   hintUsed?, fullScore }                              |
  * | ATELIER_DONE  | { totalScore, maxScore, durationMs }                  |
  *
  * @module useEventLog
@@ -32,6 +34,14 @@ import { useState, useCallback } from "react";
  * @property {string} type - Type d'événement (voir tableau ci-dessus)
  * @property {Object} data - Données associées à l'événement
  * @property {number} t    - Timestamp unix en millisecondes (Date.now())
+ */
+
+/**
+ * @typedef {Object} PredictData
+ * @property {number}  idx       - Index de la situation
+ * @property {number}  predicted - Valeur saisie par l'élève
+ * @property {number}  actual    - Valeur correcte
+ * @property {boolean} correct   - predicted === actual
  */
 
 /**
