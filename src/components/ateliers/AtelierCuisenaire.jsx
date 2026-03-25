@@ -66,38 +66,6 @@ const MAX_SCORE = CUI.length * 2 - 1;
 /** Couleur de fond du bac : ardoise sombre pour contraste maximal. */
 const BAC_BG = "#1E293B";
 
-// ─── Utilitaire : couleur de séparateur adaptative ─────────────────────────────
-
-/**
- * Calcule la luminance perçue d'une couleur hexadécimale (coefficients ITU-R BT.601).
- * Retourne une valeur entre 0 (noir) et 255 (blanc).
- *
- * @param {string} hex - Couleur hexadécimale (ex : "#F9FAFB" ou "#EF4444")
- * @returns {number} Luminance perçue (0–255)
- */
-function perceivedLuminance(hex) {
-    const h = hex.replace("#", "");
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    // Coefficients BT.601 (luminance perçue)
-    return 0.299 * r + 0.587 * g + 0.114 * b;
-}
-
-/**
- * Choisit la couleur du séparateur entre réglettes selon la luminosité du fond.
- * - Réglette claire (luminance > 180) → séparateur ardoise semi-transparent
- * - Réglette sombre → séparateur blanc semi-transparent
- *
- * @param {string} bg - Couleur de fond de la réglette (hex)
- * @returns {string} Valeur CSS rgba du séparateur
- */
-function getSeparatorColor(bg) {
-    return perceivedLuminance(bg) > 180
-        ? "rgba(100, 116, 139, 0.55)" // slate-500 — lisible sur fond clair
-        : "rgba(255, 255, 255, 0.20)"; // blanc semi-transparent — sur fond sombre
-}
-
 // ─── Rod ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -151,8 +119,10 @@ Rod.defaultProps = { label: null };
 // ─── DarkRod ────────────────────────────────────────────────────────────────────
 
 /**
- * Réglette Cuisenaire sur fond ardoise (version compacte sans label).
- * Utilisée dans RodVisualizer pour les comparaisons dans le bac sombre.
+ * Réglette Cuisenaire sur fond ardoise.
+ * Utilisée systématiquement pour : le tout, la partie, les parts ajoutées.
+ * Le border-radius assure la séparation visuelle entre réglettes adjacentes
+ * sans séparateur explicite.
  *
  * @param {Object} props
  * @param {number} props.len - Longueur en unités
@@ -214,17 +184,15 @@ DarkRod.propTypes = {
  * @param {number}  props.placed    - Réglettes posées (0..n)
  * @param {string}  props.phase     - Phase courante ('count'|'name'|'explain')
  */
+// ─── RodVisualizer ─────────────────────────────────────────────────────────────
+
 function RodVisualizer({ situation: c, placed, phase }) {
     const rodW = c.refLen * UNIT;
-    // Largeur min = réglette + padding intérieur (16px × 2)
     const minW = rodW + 32;
-
-    /** Couleur du séparateur adaptée à la luminosité de la réglette courante */
-    const separatorColor = getSeparatorColor(c.bg);
 
     return (
         <div className="rounded-2xl overflow-hidden shadow-sm">
-            {/* ── Bande blanche : réglette modèle "La partie" — hors zone ardoise ── */}
+            {/* ── Bande blanche : réglette modèle "La partie" ── */}
             {phase !== "explain" && (
                 <div className="bg-white px-4 py-2.5 flex items-center gap-3 border-b border-slate-100">
                     <span
@@ -233,20 +201,12 @@ function RodVisualizer({ situation: c, placed, phase }) {
                     >
                         La partie →
                     </span>
-                    <div
-                        style={{
-                            width: `${c.len * UNIT}px`,
-                            height: "30px",
-                            background: c.bg,
-                            border: `2px solid ${c.bd}`,
-                            borderRadius: "6px",
-                            flexShrink: 0,
-                        }}
-                    />
+                    {/* ✅ DarkRod — cohérence avec la zone ardoise */}
+                    <DarkRod len={c.len} bg={c.bg} bd={c.bd} />
                 </div>
             )}
 
-            {/* ── Fond ardoise : comparaison visuelle ── */}
+            {/* ── Fond ardoise ── */}
             <div
                 style={{
                     background: BAC_BG,
@@ -261,7 +221,7 @@ function RodVisualizer({ situation: c, placed, phase }) {
                 >
                     {phase !== "explain" ? (
                         <>
-                            {/* Réglette de référence — le tout */}
+                            {/* Le tout */}
                             <div
                                 style={{
                                     display: "flex",
@@ -288,7 +248,12 @@ function RodVisualizer({ situation: c, placed, phase }) {
                                 />
                             </div>
 
-                            {/* Zone d'accumulation — spacer de 80px pour aligner sur le tout */}
+                            {/*
+                                Zone d'accumulation — flex row de DarkRod.
+                                Pas de container overflow:hidden : le border-radius
+                                de chaque DarkRod assure la séparation visuelle.
+                                L'espace vide est implicite par comparaison avec le tout.
+                            */}
                             <div
                                 style={{
                                     display: "flex",
@@ -299,16 +264,11 @@ function RodVisualizer({ situation: c, placed, phase }) {
                                 <span
                                     style={{ width: "72px", flexShrink: 0 }}
                                 />
-                                {/* spacer muet */}
+                                {/* spacer */}
                                 <div
                                     style={{
-                                        width: `${rodW}px`,
-                                        height: "36px",
-                                        borderRadius: "6px",
-                                        background: "rgba(255,255,255,0.06)",
-                                        overflow: "hidden",
-                                        flexShrink: 0,
                                         display: "flex",
+                                        minHeight: "36px",
                                     }}
                                     aria-label={
                                         placed === 0
@@ -318,18 +278,11 @@ function RodVisualizer({ situation: c, placed, phase }) {
                                 >
                                     {Array.from({ length: placed }).map(
                                         (_, i) => (
-                                            <div
+                                            <DarkRod
                                                 key={i}
-                                                style={{
-                                                    width: `${c.len * UNIT}px`,
-                                                    height: "100%",
-                                                    background: c.bg,
-                                                    borderRight:
-                                                        i < placed - 1
-                                                            ? `1px solid ${separatorColor}`
-                                                            : "none",
-                                                    flexShrink: 0,
-                                                }}
+                                                len={c.len}
+                                                bg={c.bg}
+                                                bd={c.bd}
                                             />
                                         )
                                     )}
@@ -337,13 +290,13 @@ function RodVisualizer({ situation: c, placed, phase }) {
                             </div>
                         </>
                     ) : (
-                        /* ── Phase explain : orange + violette + décomposition ── */
+                        /* ── Phase explain ── */
                         <>
                             <DarkRod len={c.refLen} bg={c.refBg} bd={c.refBd} />
                             <DarkRod len={c.len} bg={c.bg} bd={c.bd} />
 
-                            {/* 2 réglettes rouges = décomposition de la violette */}
-                            <div style={{ display: "flex", gap: "3px" }}>
+                            {/* ✅ Pas de gap — border-radius assure la séparation */}
+                            <div style={{ display: "flex" }}>
                                 <DarkRod len={2} bg="#EF4444" bd="#B91C1C" />
                                 <DarkRod len={2} bg="#EF4444" bd="#B91C1C" />
                             </div>
