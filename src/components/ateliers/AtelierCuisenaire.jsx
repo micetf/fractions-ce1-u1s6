@@ -379,7 +379,8 @@ function RodVisualizer({ situation: c, placed, phase }) {
                                     marginTop: "2px",
                                 }}
                             >
-                                Rouge = un cinquième de l'orange → Violette = ?
+                                La rouge vaut un cinquième de l'orange. Alors la
+                                violette vaut _____ de l'orange.
                             </p>
                         </>
                     )}
