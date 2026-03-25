@@ -50,6 +50,18 @@ export function ruleMsg(n) {
 }
 
 /**
+ * Met tous les mots d'un libellé au pluriel en ajoutant "s".
+ * @param {string} s - Libellé singulier (ex : "grand triangle")
+ * @returns {string} Libellé pluriel (ex : "grands triangles")
+ */
+export function pluriel(s) {
+    return s
+        .split(" ")
+        .map((w) => w + "s")
+        .join(" ");
+}
+
+/**
  * Feedback positif après un comptage réussi.
  *
  * @param {number} n   - Nombre de pièces
@@ -58,12 +70,6 @@ export function ruleMsg(n) {
  * @returns {string}
  */
 export const okCountMsg = (n, p, t) => {
-    const pluriel = (s) => {
-        return s
-            .split(" ")
-            .map((t) => t + "s")
-            .join(" ");
-    };
     const genre = (s) => {
         return s.includes("carré") || s.includes("disque") ? "le" : "la";
     };
@@ -80,12 +86,6 @@ export const okCountMsg = (n, p, t) => {
  * @returns {string}
  */
 export const okNameMsg = (n, p, t, f) => {
-    const pluriel = (s) => {
-        return s
-            .split(" ")
-            .map((t) => t + "s")
-            .join(" ");
-    };
     const genre = (s) => {
         return s.includes("carré") || s.includes("disque") ? "le" : "la";
     };

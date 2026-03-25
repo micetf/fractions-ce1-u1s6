@@ -3,11 +3,11 @@
  * @see AtelierDisques
  *
  * Structure d'une situation :
- * - n      {number} Nombre de secteurs égaux du disque
- * - ai     {number} Index du secteur actif (coloré en permanence)
+ * - n      {number} Nombre de parts égalex du disque
+ * - ai     {number} Index de la part active (colorée en permanence)
  * - color  {string} Couleur principale (hex)
  * - light  {string} Couleur de fond du disque (hex)
- * - rot    {number} Rotation (degrés) appliquée au modèle de secteur
+ * - rot    {number} Rotation (degrés) appliquée au modèle de la part
  *                   pour éviter l'orientation prototypique (corde verticale
  *                   ou pointe alignée sur un axe cardinal)
  *

@@ -1,11 +1,11 @@
 /**
- * @file AtelierDisques — atelier de fractions avec les secteurs du disque.
+ * @file AtelierDisques — atelier de fractions avec les parts du disque.
  *
  * @description
  * Activité en deux phases enchaînées pour chaque situation :
  *
- * 1. **Phase `count`** — Le disque commence vide. L'élève ajoute des secteurs
- *    un à un jusqu'à le remplir entièrement, puis valide. Un secteur de
+ * 1. **Phase `count`** — Le disque commence vide. L'élève ajoute des parts
+ *    un à un jusqu'à le remplir entièrement, puis valide. Une part de
  *    référence (toujours visible) rappelle la part à compter.
  *
  * 2. **Phase `name`**  — L'élève choisit parmi 4 options le nom de la fraction.
@@ -14,7 +14,7 @@
  * Modèle de remplissage
  * ────────────────────────────────────────────────────────────────
  * `placed` va de 0 (disque vide) à d.n (disque plein).
- * Ordre de remplissage : secteur `ai` en premier (= secteur de référence),
+ * Ordre de remplissage : part `ai` en premier (= part de référence),
  * puis les autres dans l'ordre des index SVG.
  * Tenter d'ajouter quand placed === d.n → FullModal.
  *
@@ -56,17 +56,17 @@ const CENTER = 100;
 // ─── DisqueSVG ─────────────────────────────────────────────────────────────────
 
 /**
- * Disque progressivement rempli secteur par secteur.
+ * Disque progressivement rempli part par part.
  *
  * placed=0 → disque vide. placed=d.n → disque plein.
- * Ordre de remplissage : secteur ai en premier, puis les autres.
+ * Ordre de remplissage : part ai en premier, puis les autres.
  *
  * @param {{ situation: Object, placed: number }} props
  */
 function DisqueSVG({ situation: d, placed, size = 200 }) {
     const step = 360 / d.n;
 
-    // Ordre de remplissage : ai en tête (correspond au secteur de référence)
+    // Ordre de remplissage : ai en tête (correspond à la part de référence)
     const fillOrder = useMemo(
         () => [
             d.ai,
@@ -139,11 +139,11 @@ DisqueSVG.propTypes = {
  *
  * @param {Object}   props
  * @param {Object}   props.situation  - Données de la situation
- * @param {number}   props.placed     - Secteurs placés (0..d.n)
+ * @param {number}   props.placed     - parts placés (0..d.n)
  * @param {Object}   props.feedback   - { type, msg } | null
  * @param {Function} props.onContinue - Transition vers la phase name
- * @param {Function} props.onAdd      - Ajouter un secteur
- * @param {Function} props.onRemove   - Retirer un secteur
+ * @param {Function} props.onAdd      - Ajouter une part
+ * @param {Function} props.onRemove   - Retirer une part
  * @param {Function} props.onValidate - Valider le comptage
  */
 function PhaseCount({
@@ -160,7 +160,7 @@ function PhaseCount({
             <div className="flex gap-3 justify-center">
                 <button
                     onClick={onAdd}
-                    aria-label="Ajouter un secteur"
+                    aria-label="Ajouter une part"
                     className="btn-add flex-1 py-4 rounded-2xl text-2xl font-bold text-white
                      shadow-md touch-manipulation"
                     style={{ background: d.color }}
@@ -170,7 +170,7 @@ function PhaseCount({
                 <button
                     onClick={onRemove}
                     disabled={placed === 0}
-                    aria-label="Retirer le dernier secteur"
+                    aria-label="Retirer la dernière part"
                     className="btn-add py-4 px-5 rounded-2xl text-xl font-bold
                      bg-white border-2 border-slate-200 text-slate-600 disabled:opacity-30"
                 >
@@ -381,7 +381,7 @@ export default function AtelierDisques({ log }) {
             log("COUNT_OK", { idx, countErrors: countErrCount.current });
             setFeedback({
                 type: "ok",
-                msg: okCountMsg(d.n, "secteur", "disque"),
+                msg: okCountMsg(d.n, "part", "disque"),
             });
         } else if (placed < d.n) {
             countErrCount.current++;
@@ -407,7 +407,7 @@ export default function AtelierDisques({ log }) {
                 log("NAME_OK", { idx, nameErrors: nameErr });
                 setFeedback({
                     type: "ok",
-                    msg: okNameMsg(d.n, "secteur", "disque", ans),
+                    msg: okNameMsg(d.n, "part", "disque", ans),
                 });
             } else {
                 const ne = nameErr + 1;
@@ -415,7 +415,7 @@ export default function AtelierDisques({ log }) {
                 log("NAME_ERR", { idx, chosen: opt, answer: ans, errN: ne });
                 setFeedback({
                     type: "err",
-                    msg: ne === 1 ? errName1(d.n, "secteurs") : errName2(d.n),
+                    msg: ne === 1 ? errName1(d.n, "parts") : errName2(d.n),
                 });
             }
         },
@@ -465,15 +465,15 @@ export default function AtelierDisques({ log }) {
                       text-center text-lg font-bold text-purple-900 leading-snug"
             >
                 {isCount
-                    ? "Combien de secteurs faut-il pour remplir le disque entier ?"
-                    : "Ce secteur représente _____ du disque."}
+                    ? "Combien de parts faut-il pour remplir le disque entier ?"
+                    : "Cette part représente _____ du disque."}
             </div>
 
-            {/* ── Visualisation : disque à remplir + modèle du secteur, même échelle ── */}
+            {/* ── Visualisation : disque à remplir + modèle de la part, même échelle ── */}
             {/*
         Les deux SVGs : size=150px CSS, viewBox="0 0 200 200".
         150 + 150 + gap ≈ 316px → tient sur un écran 375px.
-        Le secteur modèle est tourné de d.rot° autour du centre pour éviter
+        La part modèle est tourné de d.rot° autour du centre pour éviter
         toute orientation prototypique (corde verticale, pointe cardinale…).
       */}
             <div className="flex items-end justify-center gap-4">
@@ -485,11 +485,11 @@ export default function AtelierDisques({ log }) {
                     </span>
                 </div>
 
-                {/* Le modèle du secteur : même taille CSS, rotation non-prototypique */}
+                {/* Le modèle de la part : même taille CSS, rotation non-prototypique */}
                 <div className="flex flex-col items-center gap-1">
                     <svg
                         viewBox="0 0 200 200"
-                        aria-label="Modèle : un secteur"
+                        aria-label="Modèle : une part"
                         style={{
                             width: "150px",
                             height: "150px",
@@ -515,7 +515,7 @@ export default function AtelierDisques({ log }) {
                         className="text-xs font-semibold"
                         style={{ color: d.color }}
                     >
-                        un secteur
+                        une part
                     </span>
                 </div>
             </div>

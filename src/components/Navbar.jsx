@@ -306,8 +306,9 @@ function HelpModal({ onClose }) {
                                         <span>
                                             <strong>Ajouter</strong> — appuie
                                             sur le bouton pour poser une pièce,
-                                            un secteur ou une réglette. Tu peux
-                                            aussi en retirer avec le bouton ↩.
+                                            un sectee part ou une réglette. Tu
+                                            peux aussi en retirer avec le bouton
+                                            ↩.
                                         </span>
                                     </li>
                                     <li className="flex gap-3 items-start">

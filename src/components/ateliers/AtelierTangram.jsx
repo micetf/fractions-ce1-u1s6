@@ -37,6 +37,7 @@ import {
     errCountMany,
     errName1,
     errName2,
+    pluriel,
 } from "../../utils/feedback.js";
 import Btn from "../ui/Btn.jsx";
 import Bubble from "../ui/Bubble.jsx";
@@ -404,7 +405,7 @@ export default function AtelierTangram({ log }) {
                     type: "err",
                     msg:
                         ne === 1
-                            ? errName1(s.n, `${s.pieceLabel}s`)
+                            ? errName1(s.n, pluriel(s.pieceLabel))
                             : errName2(s.n),
                 });
             }
@@ -461,7 +462,7 @@ export default function AtelierTangram({ log }) {
                             className="not-italic font-extrabold"
                             style={{ color: s.color }}
                         >
-                            {s.pieceLabel}
+                            {pluriel(s.pieceLabel)}
                         </em>{" "}
                         faut-il pour remplir le {s.tout} ?
                     </>

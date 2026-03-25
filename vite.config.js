@@ -5,4 +5,5 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
     base: "/fractions-ce1-u1s6/",
     plugins: [react()],
+    server: {open: true}
 });
