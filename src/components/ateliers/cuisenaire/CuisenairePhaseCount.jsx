@@ -7,11 +7,6 @@
  * le feedback procédural (incluant la correction de prédiction via "warn"),
  * et le bouton de validation.
  *
- * Spécificité Cuisenaire par rapport aux autres ateliers :
- * - Un bouton "Besoin d'un indice ?" est disponible (une seule fois)
- * - L'indice est affiché via une Bubble type "hint" une fois activé
- * - Son utilisation est tracée dans le journal (HINT_USED)
- *
  * ────────────────────────────────────────────────────────────────
  * Feedback warn vs ok
  * ────────────────────────────────────────────────────────────────
@@ -34,7 +29,6 @@ const COLOR = "#B45309";
  * @param {Object}   props
  * @param {Object}   props.situation  - Données de la situation (CUI[idx])
  * @param {number}   props.placed     - Réglettes posées (0..c.n)
- * @param {boolean}  props.hintShown  - Indice déjà affiché
  * @param {Object}   props.feedback   - { type, msg } | null
  * @param {Function} props.onContinue - Transition vers la phase name
  * @param {Function} props.onAdd      - Ajouter une réglette
@@ -45,12 +39,10 @@ const COLOR = "#B45309";
 export default function CuisenairePhaseCount({
     situation: c,
     placed,
-    hintShown,
     feedback,
     onContinue,
     onAdd,
     onRemove,
-    onHint,
     onValidate,
 }) {
     const isSuccess = feedback?.type === "ok" || feedback?.type === "warn";
@@ -79,20 +71,6 @@ export default function CuisenairePhaseCount({
                     ↩
                 </button>
             </div>
-
-            {/* Bouton indice — affiché une seule fois, avant activation */}
-            {!hintShown && (
-                <button
-                    onClick={onHint}
-                    className="text-xs text-amber-700 underline text-center
-                               touch-manipulation py-1"
-                >
-                    Besoin d'un indice ?
-                </button>
-            )}
-
-            {/* Indice affiché après activation */}
-            {hintShown && <Bubble type="hint" msg={`💡 ${c.hint}`} />}
 
             {/* Feedback procédural (ok, warn ou err) */}
             {feedback && (
@@ -123,12 +101,9 @@ CuisenairePhaseCount.propTypes = {
     /** Données de la situation issue de cuisenaire.js */
     situation: PropTypes.shape({
         refName: PropTypes.string.isRequired,
-        hint: PropTypes.string.isRequired,
     }).isRequired,
     /** Réglettes posées (0..c.n) */
     placed: PropTypes.number.isRequired,
-    /** Indice déjà activé par l'élève */
-    hintShown: PropTypes.bool.isRequired,
     /** Feedback courant — null si aucun message */
     feedback: PropTypes.shape({
         type: PropTypes.oneOf(["ok", "err", "warn"]).isRequired,

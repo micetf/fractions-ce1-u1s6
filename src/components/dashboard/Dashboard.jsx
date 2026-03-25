@@ -70,7 +70,6 @@ import ErrPill from "./ErrPill.jsx";
  * @property {'active'|'perfect'|'good'|'struggled'} status
  * @property {number}      countErrors
  * @property {number}      nameErrors
- * @property {boolean}     hintUsed
  * @property {number|null} durationMs
  * @property {boolean}     fullScore
  * @property {Array<{chosen:string, answer:string}>} distractors
@@ -153,7 +152,6 @@ export default function Dashboard({ events, atelierMeta, startTs, onClose }) {
                     status: "active",
                     countErrors: 0,
                     nameErrors: 0,
-                    hintUsed: false,
                     durationMs: null,
                     fullScore: false,
                     distractors: [],
@@ -174,10 +172,6 @@ export default function Dashboard({ events, atelierMeta, startTs, onClose }) {
                     chosen: data.chosen,
                     answer: data.answer,
                 });
-            }
-
-            if (type === "HINT_USED") {
-                map[data.idx].hintUsed = true;
             }
 
             if (type === "SIT_DONE") {
@@ -203,7 +197,6 @@ export default function Dashboard({ events, atelierMeta, startTs, onClose }) {
     // ── Métriques dérivées ──────────────────────────────────────────────────────
     const done = sits.filter((s) => s.status !== "active");
     const current = sits.find((s) => s.status === "active");
-    const hintCount = sits.filter((s) => s.hintUsed).length;
     const firstTryCount = done.filter(
         (s) => s.countErrors === 0 || s.countErrors === null
     ).length;
@@ -400,11 +393,6 @@ export default function Dashboard({ events, atelierMeta, startTs, onClose }) {
                                             <th className="text-center pb-2 px-2">
                                                 Durée
                                             </th>
-                                            {hintCount > 0 && (
-                                                <th className="text-center pb-2 px-2">
-                                                    Indice
-                                                </th>
-                                            )}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -469,19 +457,6 @@ export default function Dashboard({ events, atelierMeta, startTs, onClose }) {
                                                     <td className="py-2 px-2 text-center text-slate-500 text-xs rounded-r-xl">
                                                         {fmtMs(s.durationMs)}
                                                     </td>
-                                                    {hintCount > 0 && (
-                                                        <td className="py-2 px-2 text-center rounded-r-xl">
-                                                            {s.hintUsed ? (
-                                                                <span className="text-amber-500 text-base">
-                                                                    💡
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-slate-200 text-xs">
-                                                                    —
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                    )}
                                                 </tr>
                                             );
                                         })}

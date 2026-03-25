@@ -90,7 +90,6 @@ export default function AtelierCuisenaire({ log }) {
     const [nameErr, setNameErr] = useState(0);
     const [score, setScore] = useState(0);
     const [done, setDone] = useState(false);
-    const [hintShown, setHintShown] = useState(false);
 
     const sitStart = useRef(Date.now());
     const countErrCount = useRef(0);
@@ -110,7 +109,6 @@ export default function AtelierCuisenaire({ log }) {
     useEffect(() => {
         sitStart.current = Date.now();
         countErrCount.current = 0;
-        setHintShown(false);
         setPlaced(0);
         setPhase(c.nonUnit ? "explain" : "predict");
         setPredicted(null);
@@ -153,7 +151,6 @@ export default function AtelierCuisenaire({ log }) {
                 countErrors: c.nonUnit ? null : countErrCount.current,
                 nameErrors: finalNameErr,
                 durationMs: dur,
-                hintUsed: hintShown,
                 fullScore: isFullScore,
             });
 
@@ -170,7 +167,7 @@ export default function AtelierCuisenaire({ log }) {
                 });
             }
         },
-        [idx, c, score, predicted, hintShown, log]
+        [idx, c, score, predicted, log]
     );
 
     // ── Handler PREDICT ──────────────────────────────────────────────────────────
@@ -211,11 +208,6 @@ export default function AtelierCuisenaire({ log }) {
         setPlaced((p) => Math.max(p - 1, 0));
         setFeedback(null);
     }, []);
-
-    const handleHint = useCallback(() => {
-        setHintShown(true);
-        log("HINT_USED", { idx });
-    }, [idx, log]);
 
     /**
      * Valide le comptage et construit le feedback en intégrant la
@@ -452,12 +444,10 @@ export default function AtelierCuisenaire({ log }) {
                 <CuisenairePhaseCount
                     situation={c}
                     placed={placed}
-                    hintShown={hintShown}
                     feedback={feedback}
                     onContinue={handleCountContinue}
                     onAdd={handleAdd}
                     onRemove={handleRemove}
-                    onHint={handleHint}
                     onValidate={handleValidateCount}
                 />
             )}

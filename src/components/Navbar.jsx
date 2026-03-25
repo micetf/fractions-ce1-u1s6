@@ -220,14 +220,6 @@ function HelpModal({ onClose }) {
                                             raisonnement avant que l'élève nomme
                                             la fraction.
                                         </p>
-                                        <p className="mt-1">
-                                            Un <strong>indice</strong> est
-                                            disponible à la demande sur les
-                                            situations de fraction unité (bouton
-                                            "Besoin d'un indice ?"). Son
-                                            utilisation est tracée dans le
-                                            tableau de bord.
-                                        </p>
                                     </div>
                                 </div>
                             </section>

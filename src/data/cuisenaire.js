@@ -17,7 +17,6 @@
  * - answer  {string}      Fraction attendue (libellé littéral)
  * - nonUnit {boolean}     Vrai si la réglette ne correspond pas à une fraction unité
  * - fOpts   {string[]}    Quatre options de nommage
- * - hint    {string}      Texte de l'indice (optionnel, affiché sur demande)
  *
  * @typedef {Object} CuisenaireSituation
  * @property {number}      len
@@ -32,7 +31,6 @@
  * @property {string}      answer
  * @property {boolean}     nonUnit
  * @property {string[]}    fOpts
- * @property {string}      hint
  */
 
 /** Largeur SVG d'une unité de réglette (px) */
@@ -53,7 +51,6 @@ export const CUI = [
         answer: "un dixième",
         nonUnit: false,
         fOpts: ["un dixième", "un cinquième", "un huitième", "un quart"],
-        hint: "Il faut 10 réglettes blanches pour couvrir la réglette orange.",
     },
     {
         len: 2,
@@ -68,7 +65,6 @@ export const CUI = [
         answer: "un cinquième",
         nonUnit: false,
         fOpts: ["un cinquième", "un dixième", "un quart", "un demi"],
-        hint: "Il faut 5 réglettes rouges pour couvrir la réglette orange.",
     },
     {
         len: 5,
@@ -83,7 +79,6 @@ export const CUI = [
         answer: "un demi",
         nonUnit: false,
         fOpts: ["un demi", "un quart", "un cinquième", "deux cinquièmes"],
-        hint: "Il faut 2 réglettes jaunes pour couvrir la réglette orange.",
     },
     {
         len: 2,
@@ -98,7 +93,6 @@ export const CUI = [
         answer: "un tiers",
         nonUnit: false,
         fOpts: ["un tiers", "un sixième", "un quart", "un demi"],
-        hint: "Il faut 3 réglettes rouges pour couvrir la réglette vert foncé.",
     },
     {
         len: 1,
@@ -113,7 +107,6 @@ export const CUI = [
         answer: "un sixième",
         nonUnit: false,
         fOpts: ["un sixième", "un tiers", "un huitième", "un dixième"],
-        hint: "Il faut 6 réglettes blanches pour couvrir la réglette vert foncé.",
     },
     {
         len: 4,
@@ -128,6 +121,5 @@ export const CUI = [
         answer: "deux cinquièmes",
         nonUnit: true,
         fOpts: ["deux cinquièmes", "un cinquième", "deux dixièmes", "un demi"],
-        hint: "La réglette violette = 2 réglettes rouges. La rouge est un cinquième. Donc la violette = 2 × un cinquième.",
     },
 ];

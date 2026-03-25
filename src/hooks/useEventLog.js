@@ -21,7 +21,6 @@
  * | HINT_USED     | { idx }                                               |
  * | SIT_DONE      | { idx, label, n, answer, predictCorrect,              |
  * |               |   countErrors, nameErrors, durationMs,                |
- * |               |   hintUsed?, fullScore }                              |
  * | ATELIER_DONE  | { totalScore, maxScore, durationMs }                  |
  *
  * @module useEventLog
