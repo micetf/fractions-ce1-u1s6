@@ -6,10 +6,24 @@
  * `StrictMode` est activé pour détecter les effets de bord involontaires
  * et les usages dépréciés en développement.
  *
- * Le fichier `index.css` est importé ici pour garantir que les styles
- * globaux (Tailwind, animations, polices) sont chargés avant le premier rendu.
+ * Les polices Fredoka et Nunito sont importées depuis @fontsource
+ * (auto-hébergées, conformes RGPD — aucune requête vers les serveurs Google).
+ * Seules les graisses effectivement utilisées sont importées pour limiter
+ * le volume de fichiers embarqués dans le build.
+ *
+ * Fredoka  : 500 (titres courants), 700 (titres forts)
+ * Nunito   : 400 (corps), 600 (semi-bold), 700 (bold), 800 (extra-bold)
  */
 
+// ── Polices auto-hébergées ────────────────────────────────────────────────────
+import "@fontsource/fredoka/500.css";
+import "@fontsource/fredoka/700.css";
+import "@fontsource/nunito/400.css";
+import "@fontsource/nunito/600.css";
+import "@fontsource/nunito/700.css";
+import "@fontsource/nunito/800.css";
+
+// ── Application ───────────────────────────────────────────────────────────────
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
