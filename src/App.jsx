@@ -300,6 +300,7 @@ export default function App() {
                     events={events}
                     atelierMeta={{ ...m, total: totalSits }}
                     startTs={startTs}
+                    activeStudent={activeStudent}
                     defaultTab={dashDefaultTab}
                     teacherMode={dashTeacherMode}
                     onClose={handleCloseDash}

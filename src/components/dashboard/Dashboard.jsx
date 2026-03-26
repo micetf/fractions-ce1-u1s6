@@ -56,6 +56,7 @@ export default function Dashboard({
     events,
     atelierMeta,
     startTs,
+    activeStudent = null,
     defaultTab = "session",
     teacherMode = false,
     onClose,
@@ -83,6 +84,45 @@ export default function Dashboard({
         >
             <div className="flex-1 overflow-y-auto p-3 pb-8 kf-up print-page">
                 <div className="max-w-xl mx-auto">
+                    {/* ── En-tête imprimable — invisible à l'écran ── */}
+                    <div className="hidden print:block mb-6 pb-4 border-b-2 border-slate-200">
+                        {/* Titre application */}
+                        <p
+                            className="text-xl font-bold text-slate-800"
+                            style={{ fontFamily: "'Fredoka', sans-serif" }}
+                        >
+                            🧮 Fractions CE1 · Tableau de bord
+                        </p>
+
+                        {/* Méta : élève + atelier + date */}
+                        <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2">
+                            {activeStudent && (
+                                <p className="text-base font-bold text-slate-700">
+                                    👤 Élève :{" "}
+                                    <span className="text-slate-900">
+                                        {activeStudent.pseudo}
+                                    </span>
+                                </p>
+                            )}
+                            <p className="text-base font-bold text-slate-700">
+                                {atelierMeta.icon} Atelier :{" "}
+                                <span className="text-slate-900">
+                                    {atelierMeta.label}
+                                </span>
+                            </p>
+                            <p className="text-base font-bold text-slate-700">
+                                📅 Date :{" "}
+                                <span className="text-slate-900">
+                                    {new Date().toLocaleDateString("fr-FR", {
+                                        weekday: "long",
+                                        day: "numeric",
+                                        month: "long",
+                                        year: "numeric",
+                                    })}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
                     {/* ── En-tête ── */}
                     <div className="flex items-center justify-between mb-3 no-print">
                         <div className="flex items-center gap-2">
@@ -290,6 +330,10 @@ Dashboard.propTypes = {
         total: PropTypes.number.isRequired,
     }).isRequired,
     startTs: PropTypes.number,
+    activeStudent: PropTypes.shape({
+        id: PropTypes.string.isRequired,
+        pseudo: PropTypes.string.isRequired,
+    }),
     defaultTab: PropTypes.oneOf(["session", "classe"]),
     teacherMode: PropTypes.bool,
     onClose: PropTypes.func.isRequired,
