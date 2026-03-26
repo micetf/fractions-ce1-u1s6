@@ -2,27 +2,23 @@
  * @file Dashboard.jsx — tableau de bord enseignant à deux onglets.
  *
  * @description
- * Orchestrateur étendu avec un système d'onglets :
+ * Orchestrateur étendu avec un système d'onglets et un contrôle d'accès.
  *
  * ── Onglet "📊 Session" ────────────────────────────────────────
- * Contenu existant inchangé :
- * - Métriques synthèse (temps, avancement, taux 1er essai)
- * - Frise de progression (ProgressionFrise)
- * - Tableau détaillé (SituationsTable)
- * - Erreurs repérées (ErrPill)
- * - Situation en cours
+ * Toujours visible. Accessible à tous (bouton Navbar).
+ * Contenu : métriques, frise, tableau détaillé, distracteurs,
+ * situation en cours.
  *
  * ── Onglet "👥 Classe" ─────────────────────────────────────────
- * - RosterManager : CRUD du registre d'élèves
- * - ClassTracker  : progression élèves × atelier courant + resets
+ * Visible uniquement si `teacherMode === true`.
+ * Accessible via TeacherMenu uniquement (protégé par appui long).
+ * Contenu : RosterManager (CRUD élèves) + ClassTracker (suivi + resets).
  *
  * ────────────────────────────────────────────────────────────────
- * Ouverture ciblée
+ * Prop teacherMode
  * ────────────────────────────────────────────────────────────────
- * La prop `defaultTab` permet d'ouvrir le Dashboard directement sur
- * l'onglet "Classe" (ex : depuis StudentSelectScreen avant toute session).
- * Quand `startTs` est null, l'onglet Session est masqué pour éviter
- * un LiveTimer sans timestamp de départ.
+ * false (défaut) : ouverture via bouton 📊 Navbar — Session uniquement.
+ * true           : ouverture via TeacherMenu — les deux onglets visibles.
  *
  * @module Dashboard
  */
@@ -70,30 +66,28 @@ Tab.propTypes = {
 // ─── Composant principal ────────────────────────────────────────────────────────
 
 /**
- * Tableau de bord enseignant — overlay fullscreen à deux onglets.
- *
  * @param {Object}      props
- * @param {Array}       props.events         - Journal complet des événements
- * @param {Object}      props.atelierMeta    - Métadonnées de l'atelier (icon, label, color, total)
- * @param {number|null} props.startTs        - Timestamp début de séance (null avant première session)
- * @param {string}      [props.defaultTab]   - Onglet affiché à l'ouverture ("session"|"classe")
- * @param {Function}    props.onClose        - Ferme le Dashboard
- * @param {Array}       props.students       - Registre élèves (useRoster)
- * @param {Object}      props.traces         - Store de traces (useStudentTraces)
- * @param {string}      props.atelierID      - Identifiant atelier courant
- * @param {Function}    props.addStudent     - Ajoute un élève
- * @param {Function}    props.removeStudent  - Supprime un élève
- * @param {Function}    props.resetStudent   - Reset individuel (atelierID, studentId)
- * @param {Function}    props.resetAtelier   - Reset par atelier (atelierID)
- * @param {Function}    props.resetAll       - Reset total
- *
- * @returns {JSX.Element}
+ * @param {Array}       props.events        - Journal complet des événements
+ * @param {Object}      props.atelierMeta   - Métadonnées de l'atelier
+ * @param {number|null} props.startTs       - Timestamp début de séance (null avant 1ère session)
+ * @param {string}      [props.defaultTab]  - Onglet affiché à l'ouverture
+ * @param {boolean}     [props.teacherMode] - true = onglet Classe visible
+ * @param {Function}    props.onClose
+ * @param {Array}       props.students
+ * @param {Object}      props.traces
+ * @param {string}      props.atelierID
+ * @param {Function}    props.addStudent
+ * @param {Function}    props.removeStudent
+ * @param {Function}    props.resetStudent
+ * @param {Function}    props.resetAtelier
+ * @param {Function}    props.resetAll
  */
 export default function Dashboard({
     events,
     atelierMeta,
     startTs,
     defaultTab = "session",
+    teacherMode = false,
     onClose,
     students,
     traces,
@@ -108,7 +102,6 @@ export default function Dashboard({
     const { sits, done, current, allDistractors, firstTryPct, avgDur } =
         useSituationStats(events);
 
-    // Si aucune session n'a démarré, l'onglet Session n'a pas de sens
     const hasSession = startTs !== null;
 
     return (
@@ -162,120 +155,156 @@ export default function Dashboard({
                         </div>
                     </div>
 
-                    {/* ── Sélecteur d'onglets ── */}
-                    <div className="flex gap-1 mb-4 no-print border-b border-white/10 pb-1">
-                        {hasSession && (
+                    {/* ── Sélecteur d'onglets — Classe visible en mode enseignant uniquement ── */}
+                    {teacherMode && (
+                        <div className="flex gap-1 mb-4 no-print border-b border-white/10 pb-1">
+                            {hasSession && (
+                                <Tab
+                                    label="📊 Session en cours"
+                                    active={tab === "session"}
+                                    onClick={() => setTab("session")}
+                                />
+                            )}
                             <Tab
-                                label="📊 Session en cours"
-                                active={tab === "session"}
-                                onClick={() => setTab("session")}
+                                label="👥 Suivi classe"
+                                active={tab === "classe"}
+                                onClick={() => setTab("classe")}
                             />
-                        )}
-                        <Tab
-                            label="👥 Suivi classe"
-                            active={tab === "classe"}
-                            onClick={() => setTab("classe")}
-                        />
-                    </div>
+                        </div>
+                    )}
 
                     {/* ════ ONGLET SESSION ════ */}
-                    {tab === "session" && hasSession && (
+                    {(tab === "session" || !teacherMode) && (
                         <>
-                            {/* Métriques synthèse */}
-                            <div className="grid grid-cols-3 gap-2 mb-4">
-                                <MetricCard
-                                    icon="🕐"
-                                    label="Temps"
-                                    value={<LiveTimer startTs={startTs} />}
-                                    sub={
-                                        avgDur ? `~${fmtMs(avgDur)}/sit` : null
-                                    }
-                                    bg="#1E3A5F"
-                                    color="#93C5FD"
-                                />
-                                <MetricCard
-                                    icon="📍"
-                                    label="Avancement"
-                                    value={`${done.length}/${atelierMeta.total}`}
-                                    sub={`${done.length ? Math.round((done.length / atelierMeta.total) * 100) : 0}% terminé`}
-                                    bg="#1A3327"
-                                    color="#6EE7B7"
-                                />
-                                <MetricCard
-                                    icon="🎯"
-                                    label="1er essai"
-                                    value={`${firstTryPct}%`}
-                                    sub="predict + nommage"
-                                    bg="#321530"
-                                    color="#F9A8D4"
-                                />
-                            </div>
-
-                            <ProgressionFrise
-                                sits={sits}
-                                total={atelierMeta.total}
-                            />
-                            <SituationsTable done={done} />
-
-                            {/* Distracteurs */}
-                            {allDistractors.length > 0 && (
-                                <div className="bg-white rounded-2xl p-4 mb-3">
-                                    <p
-                                        className="text-slate-600 text-xs font-bold
-                                                  uppercase tracking-widest mb-2"
-                                    >
-                                        Erreurs repérées — distracteurs
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {allDistractors.map((d, i) => (
-                                            <ErrPill
-                                                key={i}
-                                                chosen={d.chosen}
-                                                answer={d.answer}
-                                                count={d.count}
-                                            />
-                                        ))}
+                            {hasSession ? (
+                                <>
+                                    {/* Métriques synthèse */}
+                                    <div className="grid grid-cols-3 gap-2 mb-4">
+                                        <MetricCard
+                                            icon="🕐"
+                                            label="Temps"
+                                            value={
+                                                <LiveTimer startTs={startTs} />
+                                            }
+                                            sub={
+                                                avgDur
+                                                    ? `~${fmtMs(avgDur)}/sit`
+                                                    : null
+                                            }
+                                            bg="#1E3A5F"
+                                            color="#93C5FD"
+                                        />
+                                        <MetricCard
+                                            icon="📍"
+                                            label="Avancement"
+                                            value={`${done.length}/${atelierMeta.total}`}
+                                            sub={`${done.length ? Math.round((done.length / atelierMeta.total) * 100) : 0}% terminé`}
+                                            bg="#1A3327"
+                                            color="#6EE7B7"
+                                        />
+                                        <MetricCard
+                                            icon="🎯"
+                                            label="1er essai"
+                                            value={`${firstTryPct}%`}
+                                            sub="predict + nommage"
+                                            bg="#321530"
+                                            color="#F9A8D4"
+                                        />
                                     </div>
-                                </div>
-                            )}
 
-                            {/* Situation en cours */}
-                            {current && (
-                                <div className="bg-white/10 rounded-2xl p-4 mb-3">
-                                    <p
-                                        className="text-white/70 text-xs font-bold
-                                                  uppercase tracking-widest mb-1"
+                                    <ProgressionFrise
+                                        sits={sits}
+                                        total={atelierMeta.total}
+                                    />
+                                    <SituationsTable done={done} />
+
+                                    {allDistractors.length > 0 && (
+                                        <div className="bg-white rounded-2xl p-4 mb-3">
+                                            <p
+                                                className="text-slate-600 text-xs font-bold
+                                                          uppercase tracking-widest mb-2"
+                                            >
+                                                Erreurs repérées — distracteurs
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {allDistractors.map((d, i) => (
+                                                    <ErrPill
+                                                        key={i}
+                                                        chosen={d.chosen}
+                                                        answer={d.answer}
+                                                        count={d.count}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {current && (
+                                        <div className="bg-white/10 rounded-2xl p-4 mb-3">
+                                            <p
+                                                className="text-white/70 text-xs font-bold
+                                                          uppercase tracking-widest mb-1"
+                                            >
+                                                Situation en cours
+                                            </p>
+                                            <p className="text-white font-bold">
+                                                {current.label}
+                                            </p>
+                                            {current.countErrors > 0 && (
+                                                <p className="text-amber-300 text-xs font-semibold mt-1">
+                                                    {current.countErrors} erreur
+                                                    {current.countErrors > 1
+                                                        ? "s"
+                                                        : ""}{" "}
+                                                    de comptage
+                                                </p>
+                                            )}
+                                            {current.nameErrors > 0 && (
+                                                <p className="text-orange-300 text-xs font-semibold">
+                                                    {current.nameErrors} erreur
+                                                    {current.nameErrors > 1
+                                                        ? "s"
+                                                        : ""}{" "}
+                                                    de nommage
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div
+                                        className="rounded-2xl p-3"
+                                        style={{
+                                            background: "rgba(255,255,255,.06)",
+                                        }}
                                     >
-                                        Situation en cours
-                                    </p>
-                                    <p className="text-white font-bold">
-                                        {current.label}
-                                    </p>
-                                    {current.countErrors > 0 && (
-                                        <p className="text-amber-300 text-xs font-semibold mt-1">
-                                            {current.countErrors} erreur
-                                            {current.countErrors > 1
-                                                ? "s"
-                                                : ""}{" "}
-                                            de comptage
+                                        <p className="text-white/40 text-xs text-center font-semibold">
+                                            CAREC Grenoble · A. Tricot ·
+                                            Enseignement explicite · S6/6
                                         </p>
-                                    )}
-                                    {current.nameErrors > 0 && (
-                                        <p className="text-orange-300 text-xs font-semibold">
-                                            {current.nameErrors} erreur
-                                            {current.nameErrors > 1
-                                                ? "s"
-                                                : ""}{" "}
-                                            de nommage
-                                        </p>
-                                    )}
+                                    </div>
+                                </>
+                            ) : (
+                                /* Aucune session démarrée — message informatif */
+                                <div
+                                    className="rounded-2xl p-8 text-center"
+                                    style={{
+                                        background: "rgba(255,255,255,.06)",
+                                    }}
+                                >
+                                    <p className="text-white/50 font-semibold">
+                                        Aucune session en cours.
+                                    </p>
+                                    <p className="text-white/30 text-sm mt-1">
+                                        Les données apparaîtront dès qu&apos;un
+                                        élève aura commencé.
+                                    </p>
                                 </div>
                             )}
                         </>
                     )}
 
-                    {/* ════ ONGLET CLASSE ════ */}
-                    {tab === "classe" && (
+                    {/* ════ ONGLET CLASSE — enseignant·e uniquement ════ */}
+                    {teacherMode && tab === "classe" && (
                         <>
                             <RosterManager
                                 students={students}
@@ -314,10 +343,10 @@ Dashboard.propTypes = {
         color: PropTypes.string.isRequired,
         total: PropTypes.number.isRequired,
     }).isRequired,
-    /** Timestamp de début de séance — null avant la première session élève */
     startTs: PropTypes.number,
-    /** Onglet affiché à l'ouverture ("session" | "classe") */
     defaultTab: PropTypes.oneOf(["session", "classe"]),
+    /** false = Session uniquement (élève) · true = Session + Classe (enseignant·e) */
+    teacherMode: PropTypes.bool,
     onClose: PropTypes.func.isRequired,
     students: PropTypes.array.isRequired,
     traces: PropTypes.object.isRequired,
@@ -332,4 +361,5 @@ Dashboard.propTypes = {
 Dashboard.defaultProps = {
     startTs: null,
     defaultTab: "session",
+    teacherMode: false,
 };

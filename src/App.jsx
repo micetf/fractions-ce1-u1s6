@@ -10,30 +10,27 @@
  * 4. **Suivi**             (`Dashboard` à deux onglets + `TeacherMenu`)
  *
  * ────────────────────────────────────────────────────────────────
+ * Contrôle d'accès au Dashboard
+ * ────────────────────────────────────────────────────────────────
+ * `dashTeacherMode` contrôle la visibilité de l'onglet "Suivi classe" :
+ *
+ * - false : ouverture via bouton 📊 Navbar → Session uniquement.
+ *           Accessible à l'élève, aucune donnée sensible exposée.
+ * - true  : ouverture via TeacherMenu (appui long 2s protégé)
+ *           → Session + Classe (RosterManager, ClassTracker, resets).
+ *
+ * ────────────────────────────────────────────────────────────────
  * Fin d'atelier — passage de tablette
  * ────────────────────────────────────────────────────────────────
  * `handleChangeStudent` est passé comme `onDone` aux trois ateliers.
- * DoneScreen l'appelle via le bouton "Passer la tablette →", ce qui
- * réouvre StudentSelectScreen sans changer d'atelier.
- *
- * ────────────────────────────────────────────────────────────────
- * Accès à la gestion des élèves — sécurisé
- * ────────────────────────────────────────────────────────────────
- * `handleManageRoster` est désormais passé uniquement à `TeacherMenu`
- * (protégé par l'appui long 2s). Il n'est plus accessible depuis
- * `StudentSelectScreen`.
+ * DoneScreen l'appelle via "Passer la tablette →".
+ * Les ateliers sont remontés via clé dynamique incluant l'ID de l'élève.
  *
  * ────────────────────────────────────────────────────────────────
  * Persistance des traces — curseur incrémental
  * ────────────────────────────────────────────────────────────────
  * `processedCountRef` traite tous les nouveaux événements depuis le
  * dernier rendu (résout le batching React 18 de SIT_DONE + ATELIER_DONE).
- *
- * ────────────────────────────────────────────────────────────────
- * Ouverture directe via URL
- * ────────────────────────────────────────────────────────────────
- * `?atelier=tg|dq|cu` bypasse SetupScreen. `TeacherMenu → Changer
- * d'atelier` remet l'URL à son état initial via history.replaceState.
  *
  * @module App
  */
@@ -119,7 +116,17 @@ export default function App() {
     );
     const [showMenu, setShowMenu] = useState(false);
     const [showDash, setShowDash] = useState(false);
+
+    /**
+     * false : accès élève via bouton 📊 — Session uniquement.
+     * true  : accès enseignant·e via TeacherMenu — Session + Classe.
+     */
+    const [dashTeacherMode, setDashTeacherMode] = useState(false);
+
+    /** Onglet affiché à l'ouverture du Dashboard. */
     const [dashDefaultTab, setDashDefaultTab] = useState("session");
+
+    /** Élève actif — null = StudentSelectScreen affiché. */
     const [activeStudent, setActiveStudent] = useState(null);
     const [showStudentSelect, setShowStudentSelect] = useState(!!urlAtelier);
 
@@ -128,11 +135,6 @@ export default function App() {
     const { events, log, resetLog } = useEventLog();
     const [startTs, setStartTs] = useState(null);
     const holdRef = useRef(null);
-
-    /**
-     * Curseur incrémental de persistance.
-     * Évite de rater des événements batchés par React 18.
-     */
     const processedCountRef = useRef(0);
 
     const { students, addStudent, removeStudent } = useRoster();
@@ -146,7 +148,7 @@ export default function App() {
         resetAll,
     } = useStudentTraces();
 
-    // ── Persistance incrémentale des traces ──────────────────────────────────────
+    // ── Persistance incrémentale ─────────────────────────────────────────────────
 
     useEffect(() => {
         if (events.length === 0) {
@@ -199,8 +201,9 @@ export default function App() {
 
     /**
      * Réinitialise la session élève sans changer d'atelier.
-     * Appelé depuis TeacherMenu ("Changer d'élève")
-     * ET depuis DoneScreen ("Passer la tablette →") via onDone.
+     * Appelé depuis :
+     * - TeacherMenu → "Changer d'élève"
+     * - DoneScreen  → "Passer la tablette →" (via onDone)
      */
     const handleChangeStudent = useCallback(() => {
         setActiveStudent(null);
@@ -210,13 +213,44 @@ export default function App() {
         resetLog();
     }, [resetLog]);
 
-    // ── Gestion du registre ──────────────────────────────────────────────────────
+    // ── Accès au Dashboard ───────────────────────────────────────────────────────
 
-    /** Ouvre le Dashboard sur l'onglet Classe. Accessible via TeacherMenu uniquement. */
+    /**
+     * Ouverture élève (bouton 📊 Navbar) — Session uniquement, pas de données sensibles.
+     */
+    const handleOpenDash = useCallback(() => {
+        setDashTeacherMode(false);
+        setDashDefaultTab("session");
+        setShowDash(true);
+        setShowMenu(false);
+    }, []);
+
+    /**
+     * Ouverture enseignant·e via TeacherMenu → "Tableau de bord".
+     * Session + Classe visibles.
+     */
+    const handleOpenDashTeacher = useCallback(() => {
+        setDashTeacherMode(true);
+        setDashDefaultTab("session");
+        setShowDash(true);
+        setShowMenu(false);
+    }, []);
+
+    /**
+     * Ouverture enseignant·e via TeacherMenu → "Gérer les élèves".
+     * Ouvre directement sur l'onglet Classe.
+     */
     const handleManageRoster = useCallback(() => {
+        setDashTeacherMode(true);
         setDashDefaultTab("classe");
         setShowDash(true);
         setShowMenu(false);
+    }, []);
+
+    const handleCloseDash = useCallback(() => {
+        setShowDash(false);
+        setDashTeacherMode(false);
+        setDashDefaultTab("session");
     }, []);
 
     // ── Appui long ───────────────────────────────────────────────────────────────
@@ -227,13 +261,7 @@ export default function App() {
 
     const endHold = useCallback(() => clearTimeout(holdRef.current), []);
 
-    // ── Handlers TeacherMenu ────────────────────────────────────────────────────
-
-    const handleOpenDash = useCallback(() => {
-        setDashDefaultTab("session");
-        setShowDash(true);
-        setShowMenu(false);
-    }, []);
+    // ── Autres handlers TeacherMenu ──────────────────────────────────────────────
 
     const handleChangeAtel = useCallback(() => {
         resetLog();
@@ -245,11 +273,6 @@ export default function App() {
     }, [resetLog]);
 
     const handleCloseMenu = useCallback(() => setShowMenu(false), []);
-
-    const handleCloseDash = useCallback(() => {
-        setShowDash(false);
-        setDashDefaultTab("session");
-    }, []);
 
     // ── Écran de sélection d'atelier ────────────────────────────────────────────
 
@@ -322,10 +345,10 @@ export default function App() {
                 />
             )}
 
-            {/* Menu enseignant·e — seul point d'accès à la gestion des élèves */}
+            {/* Menu enseignant·e — seul point d'accès aux fonctions protégées */}
             {showMenu && (
                 <TeacherMenu
-                    onDash={handleOpenDash}
+                    onDash={handleOpenDashTeacher}
                     onManage={handleManageRoster}
                     onChange={handleChangeAtel}
                     onChangeStudent={handleChangeStudent}
@@ -333,13 +356,14 @@ export default function App() {
                 />
             )}
 
-            {/* Dashboard — startTs nullable, onglet ciblé via defaultTab */}
+            {/* Dashboard — teacherMode contrôle la visibilité de l'onglet Classe */}
             {showDash && (
                 <Dashboard
                     events={events}
                     atelierMeta={{ ...m, total: totalSits }}
                     startTs={startTs}
                     defaultTab={dashDefaultTab}
+                    teacherMode={dashTeacherMode}
                     onClose={handleCloseDash}
                     students={students}
                     traces={traces}
