@@ -287,21 +287,21 @@ export default function App() {
                 <div className="bg-white rounded-3xl shadow-lg p-5">
                     {atelier === "tg" && (
                         <AtelierTangram
-                            key="tg"
+                            key={`tg-${activeStudent?.id ?? "new"}`}
                             log={log}
                             onDone={handleChangeStudent}
                         />
                     )}
                     {atelier === "dq" && (
                         <AtelierDisques
-                            key="dq"
+                            key={`dq-${activeStudent?.id ?? "new"}`}
                             log={log}
                             onDone={handleChangeStudent}
                         />
                     )}
                     {atelier === "cu" && (
                         <AtelierCuisenaire
-                            key="cu"
+                            key={`cu-${activeStudent?.id ?? "new"}`}
                             log={log}
                             onDone={handleChangeStudent}
                         />
