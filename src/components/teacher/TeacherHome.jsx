@@ -128,9 +128,6 @@ export default function TeacherHome({
                         >
                             🎓 Espace enseignant·e
                         </h1>
-                        <p className="text-slate-500 text-sm font-semibold mt-0.5">
-                            Fractions CE1 · CAREC Grenoble
-                        </p>
                     </div>
 
                     {/* ── Section 1 : Gestion de la classe ── */}

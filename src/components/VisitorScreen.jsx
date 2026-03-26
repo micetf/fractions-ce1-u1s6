@@ -51,9 +51,6 @@ export default function VisitorScreen({
                     >
                         🧮 Fractions CE1
                     </h1>
-                    <p className="text-slate-400 font-semibold text-sm">
-                        Séquence CAREC Grenoble · A.&nbsp;Tricot
-                    </p>
                 </div>
 
                 {/* ── Badge session active ── */}
