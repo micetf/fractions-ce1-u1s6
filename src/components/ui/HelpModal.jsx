@@ -3,8 +3,8 @@
  *
  * @description
  * Deux onglets :
- * - Enseignant·e : navigation, ateliers, tableau de bord,
- *   suivi de classe, sources théoriques et pédagogiques.
+ * - Enseignant·e : navigation, gestion des élèves, ateliers,
+ *   tableau de bord, suivi de classe, sources théoriques et pédagogiques.
  * - Élève : les quatre gestes de manipulation.
  *
  * @module HelpModal
@@ -40,7 +40,7 @@ export default function HelpModal({ onClose }) {
                 style={{ maxHeight: "90vh" }}
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* En-tête */}
+                {/* ── En-tête ── */}
                 <div className="px-5 pt-5 pb-0 shrink-0">
                     <h2
                         className="font-bold text-slate-800 text-xl mb-4"
@@ -76,23 +76,25 @@ export default function HelpModal({ onClose }) {
                     </div>
                 </div>
 
-                {/* Contenu scrollable */}
+                {/* ── Contenu scrollable ── */}
                 <div className="overflow-y-auto px-5 py-4 flex-1">
                     {/* ═══ ONGLET ENSEIGNANT·E ═══ */}
                     {tab === "teacher" && (
                         <div className="space-y-5 text-sm text-slate-700">
-                            {/* Navigation */}
+                            {/* Démarrage et navigation */}
                             <section>
                                 <SectionTitle>
                                     Démarrage et navigation
                                 </SectionTitle>
                                 <ul className="space-y-2">
                                     <li>
-                                        <strong>Choisir un atelier :</strong>{" "}
-                                        sélectionner l&apos;atelier depuis
-                                        l&apos;écran d&apos;accueil, puis passer
-                                        la tablette à un élève pour qu&apos;il
-                                        choisisse son prénom.
+                                        <strong>Lancer une session :</strong>{" "}
+                                        depuis l&apos;écran d&apos;accueil,
+                                        entrer dans l&apos;{" "}
+                                        <strong>Espace enseignant·e</strong>,
+                                        choisir un atelier puis cliquer sur{" "}
+                                        <strong>Lancer la session</strong>. La
+                                        tablette passe alors en mode élève.
                                     </li>
                                     <li>
                                         <strong>Accès direct :</strong> ajouter{" "}
@@ -120,11 +122,10 @@ export default function HelpModal({ onClose }) {
                                         l&apos;activité.
                                     </li>
                                     <li>
-                                        <strong>Tableau de bord :</strong>{" "}
-                                        accessible aussi via le bouton{" "}
-                                        <strong>📊</strong> en haut à droite,
-                                        sans appui long — affiche uniquement la
-                                        session élève en cours.
+                                        <strong>Tableau de bord élève :</strong>{" "}
+                                        bouton <strong>📊</strong> en haut à
+                                        droite — affiche la progression de
+                                        l&apos;élève en cours, sans appui long.
                                     </li>
                                 </ul>
                             </section>
@@ -136,7 +137,7 @@ export default function HelpModal({ onClose }) {
                                     <li>
                                         Ajouter les élèves via{" "}
                                         <strong>
-                                            Menu enseignant·e → Gérer les élèves
+                                            Espace enseignant·e → Ma classe
                                         </strong>
                                         . Un simple pseudo suffit (ex. :
                                         «&nbsp;Fred M&nbsp;»).
@@ -271,15 +272,13 @@ export default function HelpModal({ onClose }) {
                                     Suivi de classe (après séance)
                                 </SectionTitle>
                                 <p>
-                                    Via{" "}
-                                    <strong>
-                                        Menu → Gérer les élèves → onglet Suivi
-                                        classe
-                                    </strong>
-                                    . Accessible atelier par atelier, depuis
-                                    chaque tablette. Cliquer sur un élève
-                                    affiche son bilan complet : prédiction,
-                                    nommage, durée par situation, distracteurs.
+                                    Depuis l&apos;{" "}
+                                    <strong>Espace enseignant·e</strong>,
+                                    cliquer sur un atelier pour voir la
+                                    progression de toute la classe. Cliquer
+                                    ensuite sur un élève affiche son bilan
+                                    complet : prédiction, comptage, nommage,
+                                    durée par situation et distracteurs choisis.
                                 </p>
                             </section>
 
@@ -321,16 +320,6 @@ export default function HelpModal({ onClose }) {
                                         principes de l&apos;enseignement
                                         explicite.
                                     </p>
-                                    <p>
-                                        <strong>Registres sémiotiques</strong> —
-                                        Les trois ateliers mobilisent des
-                                        registres de représentation distincts
-                                        (figures géométriques, disques,
-                                        réglettes), en référence aux travaux de
-                                        Raymond Duval sur les registres
-                                        sémiotiques en didactique des
-                                        mathématiques.
-                                    </p>
                                 </div>
                             </section>
                         </div>
@@ -338,28 +327,15 @@ export default function HelpModal({ onClose }) {
 
                     {/* ═══ ONGLET ÉLÈVE ═══ */}
                     {tab === "student" && (
-                        <div className="space-y-4 text-sm text-slate-700">
-                            <p className="text-slate-500 italic">
-                                À lire avec l&apos;élève lors du premier
-                                passage, ou à projeter au tableau.
-                            </p>
-
+                        <div className="space-y-5 text-sm text-slate-700">
                             <section>
-                                <SectionTitle>Avant de commencer</SectionTitle>
-                                <p>
-                                    Cherche ton prénom dans la liste et appuie
-                                    sur <strong>C&apos;est moi !</strong>
-                                </p>
-                            </section>
-
-                            <section>
-                                <SectionTitle>Comment ça marche ?</SectionTitle>
-                                <ol className="space-y-3 list-none">
+                                <SectionTitle>Les quatre gestes</SectionTitle>
+                                <ol className="space-y-3">
                                     {[
                                         {
-                                            icon: "🔢",
-                                            title: "Prédire",
-                                            desc: "Combien de pièces faut-il pour remplir le tout ? Donne ton estimation.",
+                                            icon: "🔮",
+                                            title: "Anticiper",
+                                            desc: "Combien de pièces faudra-t-il ? Donne ton estimation.",
                                         },
                                         {
                                             icon: "➕",
@@ -409,12 +385,14 @@ export default function HelpModal({ onClose }) {
                     )}
                 </div>
 
-                {/* Pied de modale */}
-                <div className="px-5 pb-5 pt-3 shrink-0 border-t border-slate-100">
+                {/* ── Pied de modale ── */}
+                <div className="px-5 py-4 border-t border-slate-100 shrink-0">
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="w-full py-2.5 rounded-xl bg-slate-800 text-white
-                                   font-bold text-sm hover:bg-slate-700 transition-colors"
+                        className="w-full py-2.5 rounded-xl bg-slate-100
+                                   hover:bg-slate-200 text-slate-700 font-bold
+                                   text-sm transition-colors touch-manipulation"
                     >
                         Fermer
                     </button>
@@ -425,5 +403,6 @@ export default function HelpModal({ onClose }) {
 }
 
 HelpModal.propTypes = {
+    /** Ferme la modale */
     onClose: PropTypes.func.isRequired,
 };
