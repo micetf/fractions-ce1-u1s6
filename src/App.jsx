@@ -22,6 +22,9 @@
  * Le long press depuis le mode élève affiche `TeacherConfirmOverlay`
  * avant de basculer — même friction que l'entrée depuis VisitorScreen.
  *
+ * `StorageToast` est rendu à la racine (hors des trois branches de mode)
+ * via un fragment, garantissant sa présence quel que soit le mode actif.
+ *
  * @module App
  */
 
@@ -34,6 +37,7 @@ import { ATELIERS } from "./data/ateliers.js";
 import VisitorScreen from "./components/VisitorScreen.jsx";
 import TeacherSpace from "./components/teacher/TeacherSpace.jsx";
 import StudentSpace from "./components/student/StudentSpace.jsx";
+import StorageToast from "./components/ui/StorageToast.jsx"; // ← AJOUT
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
@@ -92,26 +96,34 @@ function buildSnapshot(events, sitDoneData) {
 // ─── Composant ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-    // ── Machine à états ──────────────────────────────────────────────────────────
+    // ── Machine à états ───────────────────────────────────────────────────────
     const [mode, setMode] = useState("visitor"); // 'visitor' | 'teacher' | 'student'
 
-    // ── État enseignant ───────────────────────────────────────────────────────────
+    // ── État enseignant ───────────────────────────────────────────────────────
     const [teacherView, setTeacherView] = useState("home"); // 'home' | atelierID
 
-    // ── État session ──────────────────────────────────────────────────────────────
+    // ── État session ──────────────────────────────────────────────────────────
     /** Atelier ouvert aux élèves — null = pas de session active */
     const [launchedAtelier, setLaunchedAtelier] = useState(readUrlAtelier);
 
-    // ── État élève ────────────────────────────────────────────────────────────────
+    // ── État élève ────────────────────────────────────────────────────────────
     const [activeStudent, setActiveStudent] = useState(null);
     const [startTs, setStartTs] = useState(null);
 
-    // ── Confirmation retour enseignant (long press depuis mode élève) ─────────────
+    // ── Confirmation retour enseignant (long press depuis mode élève) ─────────
     const [showTeacherConfirm, setShowTeacherConfirm] = useState(false);
 
-    // ── Hooks de données ──────────────────────────────────────────────────────────
+    // ── Hooks de données ──────────────────────────────────────────────────────
     const { events, log, resetLog } = useEventLog();
-    const { students, addStudent, removeStudent } = useRoster();
+
+    const {
+        students,
+        addStudent,
+        removeStudent,
+        storageError: rosterStorageError, // ← AJOUT
+        clearStorageError: clearRosterError, // ← AJOUT
+    } = useRoster();
+
     const {
         traces,
         openSession,
@@ -120,12 +132,24 @@ export default function App() {
         resetStudent,
         resetStudentAll,
         resetAll,
+        storageError: tracesStorageError, // ← AJOUT
+        clearStorageError: clearTracesError, // ← AJOUT
     } = useStudentTraces();
 
+    // ── Erreur de stockage combinée ── ← AJOUT ────────────────────────────────
+    const storageError = rosterStorageError || tracesStorageError;
+
+    const handleDismissStorageError = useCallback(() => {
+        // ← AJOUT
+        clearRosterError();
+        clearTracesError();
+    }, [clearRosterError, clearTracesError]);
+
+    // ── Refs ──────────────────────────────────────────────────────────────────
     const processedCountRef = useRef(0);
     const holdRef = useRef(null);
 
-    // ── Persistance incrémentale ──────────────────────────────────────────────────
+    // ── Persistance incrémentale ──────────────────────────────────────────────
     useEffect(() => {
         if (events.length === 0) {
             processedCountRef.current = 0;
@@ -152,7 +176,7 @@ export default function App() {
         markCompleted,
     ]);
 
-    // ── Handlers : mode enseignant ────────────────────────────────────────────────
+    // ── Handlers : mode enseignant ────────────────────────────────────────────
 
     /** Depuis VisitorScreen ou depuis la confirmation long press. */
     const handleEnterTeacher = useCallback(() => {
@@ -197,7 +221,7 @@ export default function App() {
         setMode("teacher");
     }, [resetLog]);
 
-    // ── Handlers : mode élève ─────────────────────────────────────────────────────
+    // ── Handlers : mode élève ─────────────────────────────────────────────────
 
     /** L'élève choisit son prénom. */
     const handleSelectStudent = useCallback(
@@ -222,7 +246,7 @@ export default function App() {
         processedCountRef.current = 0;
     }, [resetLog]);
 
-    // ── Long press : mode élève → confirmation retour enseignant ─────────────────
+    // ── Long press : mode élève → confirmation retour enseignant ─────────────
 
     const handleLongPressStart = useCallback(() => {
         holdRef.current = setTimeout(() => {
@@ -238,12 +262,15 @@ export default function App() {
         setShowTeacherConfirm(false);
     }, []);
 
-    // ── Rendu ─────────────────────────────────────────────────────────────────────
-
+    // ── Rendu ─────────────────────────────────────────────────────────────────
     const atelierMeta = launchedAtelier ? ATELIERS[launchedAtelier] : null;
 
+    // Contenu principal selon le mode — extrait en variable pour permettre
+    // au fragment racine d'accueillir StorageToast dans tous les modes.  // ← AJOUT
+    let content;
+
     if (mode === "teacher") {
-        return (
+        content = (
             <TeacherSpace
                 teacherView={teacherView}
                 setTeacherView={setTeacherView}
@@ -260,10 +287,8 @@ export default function App() {
                 onExit={handleExitTeacher}
             />
         );
-    }
-
-    if (mode === "student") {
-        return (
+    } else if (mode === "student") {
+        content = (
             <StudentSpace
                 atelierMeta={atelierMeta}
                 students={students}
@@ -282,16 +307,26 @@ export default function App() {
                 onCancelTeacherConfirm={handleCancelTeacherConfirm}
             />
         );
+    } else {
+        content = (
+            <VisitorScreen
+                launchedAtelier={launchedAtelier}
+                atelierMeta={atelierMeta}
+                students={students}
+                onEnterTeacher={handleEnterTeacher}
+                onEnterStudent={() => setMode("student")}
+            />
+        );
     }
 
-    // mode === 'visitor'
+    // Fragment racine : StorageToast persiste quel que soit le mode actif. // ← AJOUT
     return (
-        <VisitorScreen
-            launchedAtelier={launchedAtelier}
-            atelierMeta={atelierMeta}
-            students={students}
-            onEnterTeacher={handleEnterTeacher}
-            onEnterStudent={() => setMode("student")}
-        />
+        <>
+            {content}
+            <StorageToast
+                visible={storageError}
+                onDismiss={handleDismissStorageError}
+            />
+        </>
     );
 }

@@ -34,6 +34,8 @@ import { removeStorage, STORAGE_KEYS } from "../utils/storage.js";
 
 export function useStudentTraces() {
     const [traces, setTraces] = useState(() => readTraces());
+    const [storageError, setStorageError] = useState(false);
+    const clearStorageError = useCallback(() => setStorageError(false), []);
 
     /**
      * Pattern lecture-avant-écriture : relit localStorage pour merger
@@ -44,7 +46,8 @@ export function useStudentTraces() {
     const commit = useCallback((transform) => {
         const fresh = readTraces();
         const next = transform(fresh);
-        writeTraces(next);
+        const ok = writeTraces(next);
+        if (!ok) setStorageError(true);
         setTraces(next);
     }, []);
 
@@ -99,5 +102,7 @@ export function useStudentTraces() {
         resetStudent,
         resetStudentAll,
         resetAll,
+        storageError,
+        clearStorageError,
     };
 }

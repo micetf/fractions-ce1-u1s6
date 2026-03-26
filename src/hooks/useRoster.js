@@ -12,6 +12,10 @@
  * - L'identifiant est un UUID v4 généré par {@link generateUUID} — compatible
  *   HTTP et HTTPS (contextes sécurisés et non sécurisés).
  *
+ * `storageError` passe à `true` si une écriture localStorage échoue
+ * (quota dépassé, navigation privée). L'état React est quand même mis
+ * à jour — la session reste fonctionnelle, seule la persistance est perdue.
+ *
  * @module useRoster
  */
 
@@ -19,12 +23,8 @@ import { useState, useCallback } from "react";
 import { STORAGE_KEYS, readStorage, writeStorage } from "../utils/storage.js";
 import { generateUUID } from "../utils/uuid.js";
 
-// ─── Constantes ────────────────────────────────────────────────────────────────
-
 /** Longueur maximale d'un pseudo élève. */
 export const MAX_PSEUDO_LENGTH = 20;
-
-// ─── Typedef ───────────────────────────────────────────────────────────────────
 
 /**
  * @typedef {Object} Student
@@ -35,19 +35,17 @@ export const MAX_PSEUDO_LENGTH = 20;
 
 /**
  * @typedef {Object} UseRosterReturn
- * @property {Student[]} students                          - Liste triée alphabétiquement
- * @property {Function}  addStudent    (pseudo) → err|null - Ajoute un élève
- * @property {Function}  removeStudent (id)    → void      - Supprime un élève
+ * @property {Student[]} students                            - Liste triée alphabétiquement
+ * @property {Function}  addStudent    (pseudo) → err|null  - Ajoute un élève
+ * @property {Function}  removeStudent (id)    → void       - Supprime un élève
  * @property {Function}  renameStudent (id, pseudo) → err|null - Renomme un élève
+ * @property {boolean}   storageError                       - Vrai si la dernière écriture a échoué
+ * @property {Function}  clearStorageError ()  → void       - Réinitialise l'erreur
  */
-
-// ─── Helpers privés ────────────────────────────────────────────────────────────
 
 /** @param {Student[]} list @returns {Student[]} */
 const sortByPseudo = (list) =>
     [...list].sort((a, b) => a.pseudo.localeCompare(b.pseudo, "fr"));
-
-// ─── Hook ──────────────────────────────────────────────────────────────────────
 
 /**
  * Gestion du registre d'élèves persisté dans localStorage.
@@ -55,7 +53,7 @@ const sortByPseudo = (list) =>
  * @returns {UseRosterReturn}
  *
  * @example
- * const { students, addStudent, removeStudent } = useRoster();
+ * const { students, addStudent, storageError } = useRoster();
  * const err = addStudent("Fred M");
  * if (err) console.warn(err); // "Pseudo déjà utilisé"
  */
@@ -63,13 +61,21 @@ export function useRoster() {
     const [students, setStudents] = useState(() =>
         sortByPseudo(readStorage(STORAGE_KEYS.ROSTER, []))
     );
+    const [storageError, setStorageError] = useState(false);
 
-    /** Persiste et met à jour l'état en une seule opération. */
+    /**
+     * Persiste et met à jour l'état en une seule opération.
+     * Signale `storageError` si l'écriture localStorage échoue.
+     */
     const persist = useCallback((next) => {
         const sorted = sortByPseudo(next);
-        writeStorage(STORAGE_KEYS.ROSTER, sorted);
+        const ok = writeStorage(STORAGE_KEYS.ROSTER, sorted);
+        if (!ok) setStorageError(true);
         setStudents(sorted);
     }, []);
+
+    /** Réinitialise le signal d'erreur (appelé par App après affichage du toast). */
+    const clearStorageError = useCallback(() => setStorageError(false), []);
 
     /** Valide un pseudo et retourne un message d'erreur ou null. */
     const validate = useCallback(
@@ -96,7 +102,7 @@ export function useRoster() {
             const next = [
                 ...students,
                 {
-                    id: generateUUID(), // ← était : crypto.randomUUID()
+                    id: generateUUID(),
                     pseudo: pseudo.trim(),
                     createdAt: new Date().toISOString(),
                 },
@@ -126,5 +132,12 @@ export function useRoster() {
         [students, validate, persist]
     );
 
-    return { students, addStudent, removeStudent, renameStudent };
+    return {
+        students,
+        addStudent,
+        removeStudent,
+        renameStudent,
+        storageError,
+        clearStorageError,
+    };
 }
