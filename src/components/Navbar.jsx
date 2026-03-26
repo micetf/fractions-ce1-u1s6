@@ -1,54 +1,60 @@
 /**
- * @file Navbar — barre de navigation MiCetF, contextuelle selon la vue active.
+ * @file Navbar.jsx — barre de navigation MiCetF, contextuelle selon la vue active.
  *
  * @description
- * Barre fixe `h-14` (56 px), `z-50`, remplaçant l'ancien `<header>` dédié
- * aux ateliers. Elle est la **seule** barre présente dans toute l'application.
+ * Barre fixe `h-14` (56 px), `z-50`, seule barre présente dans toute
+ * l'application. Elle délègue le rendu à deux sous-composants :
+ *
+ * - **NavCenter** — zone centrale (titre fixe ou zone d'appui long + badges)
+ * - **NavActions** — zone droite (Dashboard, Aide, PayPal*, Email*)
+ *                    * PayPal et Email masqués en mode atelier
  *
  * ────────────────────────────────────────────────────────────────
  * Trois modes
  * ────────────────────────────────────────────────────────────────
  * **Mode sélection** (`atelierMeta` absent) :
- *   Gauche : lien MiCetF  |  Centre : titre fixe  |  Droite : actions
+ *   Gauche : lien MiCetF  |  Centre : titre fixe  |  Droite : Aide + PayPal + Email
  *
  * **Mode atelier sans élève** (`atelierMeta` présent, `activeStudent` null) :
  *   Centre : zone d'appui long — titre + badge atelier
+ *   Droite : Dashboard + Aide
  *
  * **Mode atelier avec élève** (`atelierMeta` + `activeStudent` présents) :
  *   Centre : titre + badge atelier + badge 👤 prénom
+ *   Droite : Dashboard + Aide
  *
  * ────────────────────────────────────────────────────────────────
  * Appui long
  * ────────────────────────────────────────────────────────────────
  * En mode atelier, la zone centrale déclenche le TeacherMenu après
- * 2 s via onLongPressStart / onLongPressEnd.
+ * 2 s via `onLongPressStart` / `onLongPressEnd` (gérés dans App.jsx).
  *
  * @module Navbar
  */
 
 import { useState } from "react";
 import PropTypes from "prop-types";
-import HelpModal from "./ui/HelpModal.jsx";
+import NavCenter from "./navbar/NavCenter.jsx";
+import NavActions from "./navbar/NavActions.jsx";
 
 // ─── Composant principal ────────────────────────────────────────────────────────
 
 /**
  * Barre de navigation MiCetF — fixe, z-50, h-14 (56 px).
  *
- * @param {Object|null}   [props.atelierMeta]        - Métadonnées de l'atelier actif
- * @param {string}        props.atelierMeta.icon     - Emoji de l'atelier
- * @param {string}        props.atelierMeta.label    - Nom de l'atelier
- * @param {string}        props.atelierMeta.color    - Couleur thématique (hex)
- * @param {string}        props.atelierMeta.light    - Couleur de fond claire (hex)
- * @param {string}        props.atelierMeta.border   - Couleur de bordure (hex)
- * @param {string}        props.atelierMeta.sub      - Sous-titre de l'atelier
- * @param {Object|null}   [props.activeStudent]      - Élève actif (null = sélection en cours)
- * @param {string}        props.activeStudent.pseudo - Pseudo affiché
- * @param {Function|null} [props.onLongPressStart]   - Début d'appui long
- * @param {Function|null} [props.onLongPressEnd]     - Fin / annulation d'appui long
- * @param {Function|null} [props.onOpenDash]         - Ouvre le Dashboard
- * @param {boolean}       [props.hasSitDone]         - Point vert sur 📊
- *
+ * @param {Object|null}   [props.atelierMeta]           - Métadonnées de l'atelier actif
+ * @param {string}         props.atelierMeta.icon        - Emoji de l'atelier
+ * @param {string}         props.atelierMeta.label       - Nom de l'atelier
+ * @param {string}         props.atelierMeta.color       - Couleur thématique (hex)
+ * @param {string}         props.atelierMeta.light       - Couleur de fond claire (hex)
+ * @param {string}         props.atelierMeta.border      - Couleur de bordure (hex)
+ * @param {string}         props.atelierMeta.sub         - Sous-titre de l'atelier
+ * @param {Object|null}   [props.activeStudent]          - Élève actif (null = sélection en cours)
+ * @param {string}         props.activeStudent.pseudo    - Pseudo affiché
+ * @param {Function|null} [props.onLongPressStart]       - Début d'appui long
+ * @param {Function|null} [props.onLongPressEnd]         - Fin / annulation d'appui long
+ * @param {Function|null} [props.onOpenDash]             - Ouvre le Dashboard
+ * @param {boolean}       [props.hasSitDone]             - Point vert sur le bouton 📊
  * @returns {JSX.Element}
  */
 export default function Navbar({
@@ -60,171 +66,90 @@ export default function Navbar({
     hasSitDone = false,
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
-    const [helpOpen, setHelpOpen] = useState(false);
     const isAtelier = atelierMeta !== null;
 
     return (
-        <>
-            <nav
-                className="fixed top-0 left-0 right-0 z-50 h-14 bg-gray-800 no-print"
-                style={{ fontFamily: "'Nunito', sans-serif" }}
-            >
-                <div className="h-full flex items-center justify-between px-3">
+        <nav
+            className="fixed top-0 left-0 right-0 bg-gray-800 shadow-lg z-50 no-print"
+            aria-label="Barre de navigation principale"
+            style={{ fontFamily: "'Nunito', sans-serif" }}
+        >
+            <div className="max-w-full px-4">
+                <div className="flex items-center justify-between h-14">
                     {/* ── Gauche : lien MiCetF ── */}
                     <a
                         href="https://micetf.fr"
-                        className="flex items-center gap-1.5 text-white/80 hover:text-white
-                                   text-sm font-bold transition-colors shrink-0"
+                        className="text-white font-semibold text-lg
+                                   hover:text-gray-300 transition shrink-0"
                         title="Retour à MiCetF"
                     >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 20 20"
-                            className="h-4 w-4 shrink-0"
-                            fill="currentColor"
-                        >
-                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                        </svg>
-                        <span className="hidden sm:inline">MiCetF</span>
+                        MiCetF
                     </a>
 
-                    {/* ── Centre : zone contextuelle ── */}
-                    <div className="flex-1 flex items-center justify-center min-w-0 px-2">
-                        {isAtelier ? (
-                            /* Zone d'appui long — titre + badges */
-                            <div
-                                className="flex items-center gap-2 cursor-pointer select-none
-                                           rounded-xl px-2 py-1 hover:bg-white/10
-                                           transition-colors min-w-0"
-                                style={{
-                                    WebkitTapHighlightColor: "transparent",
-                                }}
-                                onPointerDown={onLongPressStart}
-                                onPointerUp={onLongPressEnd}
-                                onPointerLeave={onLongPressEnd}
-                                title="Appui long : menu enseignant·e"
-                            >
-                                {/* Titre */}
-                                <span
-                                    className="text-white font-semibold text-base shrink-0"
-                                    style={{
-                                        fontFamily: "'Fredoka', sans-serif",
-                                    }}
-                                >
-                                    Fractions CE1
-                                </span>
-
-                                {/* Badge atelier — masqué sur très petits écrans */}
-                                <span
-                                    className="hidden sm:inline-flex items-center gap-1.5
-                                               px-2 py-0.5 rounded-lg text-xs font-bold shrink-0"
-                                    style={{
-                                        background: atelierMeta.light,
-                                        border: `1.5px solid ${atelierMeta.border}`,
-                                        color: atelierMeta.color,
-                                    }}
-                                >
-                                    <span>{atelierMeta.icon}</span>
-                                    <span>{atelierMeta.label}</span>
-                                </span>
-
-                                {/* Badge élève actif — affiché uniquement quand identifié */}
-                                {activeStudent && (
-                                    <span
-                                        className="inline-flex items-center gap-1 px-2 py-0.5
-                                                   rounded-lg text-xs font-bold text-white shrink-0
-                                                   max-w-[120px] truncate"
-                                        style={{
-                                            background:
-                                                "rgba(255,255,255,0.18)",
-                                        }}
-                                        title={activeStudent.pseudo}
-                                    >
-                                        <span>👤</span>
-                                        <span className="truncate">
-                                            {activeStudent.pseudo}
-                                        </span>
-                                    </span>
-                                )}
-                            </div>
-                        ) : (
-                            /* Mode sélection — titre fixe */
-                            <span
-                                className="text-white font-semibold text-base"
-                                style={{ fontFamily: "'Fredoka', sans-serif" }}
-                            >
-                                🧮 Fractions CE1
-                            </span>
-                        )}
-                    </div>
-
-                    {/* ── Droite : boutons d'action ── */}
-                    <div className="flex items-center gap-1 shrink-0">
-                        {/* Bouton 📊 — mode atelier uniquement */}
-                        {isAtelier && (
-                            <button
-                                type="button"
-                                onClick={() => onOpenDash?.()}
-                                className="relative p-2 text-white/70 hover:text-white
-                                           rounded-lg hover:bg-white/10 transition-colors
-                                           touch-manipulation"
-                                title="Tableau de bord"
-                                aria-label="Ouvrir le tableau de bord"
-                            >
-                                📊
-                                {/* Point vert si au moins une situation terminée */}
-                                {hasSitDone && (
-                                    <span
-                                        className="absolute top-1.5 right-1.5 w-2 h-2
-                                                   rounded-full bg-emerald-400"
-                                    />
-                                )}
-                            </button>
-                        )}
-
-                        {/* Bouton aide */}
-                        <button
-                            type="button"
-                            onClick={() => setHelpOpen(true)}
-                            className="p-2 text-white/70 hover:text-white rounded-lg
-                                       hover:bg-white/10 transition-colors touch-manipulation"
-                            title="Aide"
-                            aria-label="Ouvrir l'aide"
+                    {/* ── Bouton hamburger — mobile uniquement ── */}
+                    <button
+                        type="button"
+                        onClick={() => setMenuOpen((v) => !v)}
+                        className="md:hidden inline-flex items-center justify-center p-2
+                                   text-gray-400 hover:text-white hover:bg-gray-700
+                                   rounded transition touch-manipulation"
+                        aria-controls="navbarMenu"
+                        aria-expanded={menuOpen}
+                        aria-label={
+                            menuOpen ? "Fermer le menu" : "Ouvrir le menu"
+                        }
+                    >
+                        <svg
+                            className="w-6 h-6"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
                         >
-                            ❓
-                        </button>
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d={
+                                    menuOpen
+                                        ? "M6 18L18 6M6 6l12 12"
+                                        : "M4 6h16M4 12h16M4 18h16"
+                                }
+                            />
+                        </svg>
+                    </button>
 
-                        {/* Bouton menu hamburger — mobile uniquement */}
-                        <button
-                            type="button"
-                            onClick={() => setMenuOpen((v) => !v)}
-                            className="md:hidden p-2 text-white/70 hover:text-white
-                                       rounded-lg hover:bg-white/10 transition-colors
-                                       touch-manipulation"
-                            aria-label={
-                                menuOpen ? "Fermer le menu" : "Ouvrir le menu"
-                            }
-                        >
-                            {menuOpen ? "✕" : "☰"}
-                        </button>
+                    {/* ── Menu principal (desktop toujours visible, mobile déroulant) ── */}
+                    <div
+                        id="navbarMenu"
+                        className={`${menuOpen ? "flex" : "hidden"} md:flex md:items-center md:flex-1
+                                    flex-col md:flex-row absolute md:static top-14 left-0 right-0
+                                    bg-gray-800 md:bg-transparent px-4 md:px-0 pb-3 md:pb-0`}
+                    >
+                        {/* Centre */}
+                        <div className="flex items-center ml-0 md:ml-4 py-2 md:py-0">
+                            <NavCenter
+                                isAtelier={isAtelier}
+                                atelierMeta={atelierMeta}
+                                activeStudent={activeStudent}
+                                onLongPressStart={onLongPressStart}
+                                onLongPressEnd={onLongPressEnd}
+                            />
+                        </div>
+
+                        <div className="flex-1" />
+
+                        {/* Droite */}
+                        <div className="mt-2 md:mt-0">
+                            <NavActions
+                                isAtelier={isAtelier}
+                                onOpenDash={onOpenDash}
+                                hasSitDone={hasSitDone}
+                            />
+                        </div>
                     </div>
                 </div>
-
-                {/* ── Menu déroulant mobile ── */}
-                {menuOpen && (
-                    <div className="md:hidden bg-gray-800 border-t border-white/10 px-4 py-3">
-                        <a
-                            href="https://micetf.fr"
-                            className="block py-2 text-white/80 hover:text-white text-sm font-bold"
-                        >
-                            ← Retour à MiCetF
-                        </a>
-                    </div>
-                )}
-            </nav>
-
-            {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
-        </>
+            </div>
+        </nav>
     );
 }
 
