@@ -2,11 +2,10 @@
  * @file TeacherHome.jsx — accueil espace enseignant.
  *
  * @description
- * Vue principale de l'espace enseignant. Deux sections :
- *
- * 1. **Gestion de la classe** — RosterManager (ajout/suppression élèves)
- * 2. **Ateliers** — carte par atelier avec résumé de progression
- *    et accès à la vue détaillée (TeacherAtelierView).
+ * Vue principale de l'espace enseignant. Rend la Navbar en mode 'teacher'.
+ * Deux sections :
+ * 1. Gestion de la classe (RosterManager)
+ * 2. Ateliers (AtelierCard avec progression + accès vue détaillée)
  *
  * @module teacher/TeacherHome
  */
@@ -14,25 +13,23 @@
 import PropTypes from "prop-types";
 import { ATELIERS_LIST } from "../../data/ateliers.js";
 import RosterManager from "../dashboard/RosterManager.jsx";
+import Navbar from "../Navbar.jsx";
 
 // ─── Sous-composant : carte atelier ────────────────────────────────────────────
 
 /**
- * Carte d'un atelier affichant la progression de la classe
- * et un bouton d'accès à la vue détaillée.
- *
  * @param {Object}   props
  * @param {Object}   props.atelier  - Métadonnées de l'atelier
  * @param {Array}    props.students - Liste des élèves
- * @param {Object}   props.traces   - Store de traces complet
- * @param {boolean}  props.isActive - Vrai si cet atelier a une session en cours
+ * @param {Object}   props.traces   - Store de traces
+ * @param {boolean}  props.isActive - Session en cours sur cet atelier
  * @param {Function} props.onOpen   - Ouvre la vue détaillée
  */
 function AtelierCard({ atelier: a, students, traces, isActive, onOpen }) {
     const atelierTraces = traces[a.id] ?? {};
     const done = students.filter((s) => atelierTraces[s.id]?.completed).length;
     const started = students.filter(
-        (s) => atelierTraces[s.id]?.situations?.length > 0
+        (s) => (atelierTraces[s.id]?.situations?.length ?? 0) > 0
     ).length;
 
     return (
@@ -52,7 +49,7 @@ function AtelierCard({ atelier: a, students, traces, isActive, onOpen }) {
                 </span>
 
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <p
                             className="font-bold text-slate-800"
                             style={{ fontFamily: "'Fredoka', sans-serif" }}
@@ -61,7 +58,8 @@ function AtelierCard({ atelier: a, students, traces, isActive, onOpen }) {
                         </p>
                         {isActive && (
                             <span
-                                className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
+                                className="text-xs font-bold px-2 py-0.5
+                                           rounded-full text-white"
                                 style={{ background: a.color }}
                             >
                                 ● Session active
@@ -94,17 +92,14 @@ AtelierCard.propTypes = {
 // ─── Composant principal ────────────────────────────────────────────────────────
 
 /**
- * Accueil espace enseignant — gestion classe + navigation ateliers.
- *
- * @param {Object}   props
- * @param {Array}    props.students        - Liste des élèves
- * @param {Function} props.addStudent      - Ajoute un élève
- * @param {Function} props.removeStudent   - Supprime un élève
- * @param {Object}   props.traces          - Store de traces
- * @param {string|null} props.launchedAtelier - Atelier en session (null = aucun)
- * @param {Function} props.onOpenAtelier   - Ouvre la vue TeacherAtelierView(id)
- * @param {Function} props.onExit          - Quitte l'espace enseignant
- * @returns {JSX.Element}
+ * @param {Object}      props
+ * @param {Array}       props.students        - Liste des élèves
+ * @param {Function}    props.addStudent      - Ajoute un élève
+ * @param {Function}    props.removeStudent   - Supprime un élève
+ * @param {Object}      props.traces          - Store de traces
+ * @param {string|null} props.launchedAtelier - Atelier en session
+ * @param {Function}    props.onOpenAtelier   - Ouvre TeacherAtelierView(id)
+ * @param {Function}    props.onExit          - Quitte l'espace enseignant
  */
 export default function TeacherHome({
     students,
@@ -116,10 +111,16 @@ export default function TeacherHome({
     onExit,
 }) {
     return (
-        <div className="min-h-screen pb-10" style={{ background: "#F1EDE4" }}>
-            <div className="max-w-lg mx-auto px-4 pt-6 flex flex-col gap-6">
-                {/* ── En-tête ── */}
-                <div className="flex items-center justify-between">
+        <>
+            {/* ── Navbar mode enseignant ── */}
+            <Navbar mode="teacher" onBack={onExit} />
+
+            <div
+                className="min-h-screen pt-14 pb-10"
+                style={{ background: "#F1EDE4" }}
+            >
+                <div className="max-w-lg mx-auto px-4 pt-6 flex flex-col gap-6">
+                    {/* ── En-tête ── */}
                     <div>
                         <h1
                             className="text-2xl font-bold text-slate-800"
@@ -131,59 +132,49 @@ export default function TeacherHome({
                             Fractions CE1 · CAREC Grenoble
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={onExit}
-                        className="px-3 py-2 rounded-xl text-sm font-bold
-                                   text-slate-500 hover:text-slate-800
-                                   border border-slate-200 bg-white hover:bg-slate-50
-                                   transition-colors touch-manipulation"
-                    >
-                        Quitter
-                    </button>
-                </div>
 
-                {/* ── Section 1 : Gestion de la classe ── */}
-                <section>
-                    <h2
-                        className="text-xs font-bold uppercase tracking-widest
-                                   text-slate-400 mb-3"
-                    >
-                        👥 Ma classe
-                    </h2>
-                    <div className="bg-white rounded-2xl shadow-sm">
-                        <RosterManager
-                            students={students}
-                            addStudent={addStudent}
-                            removeStudent={removeStudent}
-                            traces={traces}
-                        />
-                    </div>
-                </section>
-
-                {/* ── Section 2 : Ateliers ── */}
-                <section>
-                    <h2
-                        className="text-xs font-bold uppercase tracking-widest
-                                   text-slate-400 mb-3"
-                    >
-                        📚 Ateliers
-                    </h2>
-                    <div className="flex flex-col gap-3">
-                        {ATELIERS_LIST.map((a) => (
-                            <AtelierCard
-                                key={a.id}
-                                atelier={a}
+                    {/* ── Section 1 : Gestion de la classe ── */}
+                    <section>
+                        <h2
+                            className="text-xs font-bold uppercase tracking-widest
+                                       text-slate-400 mb-3"
+                        >
+                            👥 Ma classe
+                        </h2>
+                        <div className="bg-white rounded-2xl shadow-sm">
+                            <RosterManager
                                 students={students}
+                                addStudent={addStudent}
+                                removeStudent={removeStudent}
                                 traces={traces}
-                                isActive={launchedAtelier === a.id}
-                                onOpen={() => onOpenAtelier(a.id)}
                             />
-                        ))}
-                    </div>
-                </section>
+                        </div>
+                    </section>
+
+                    {/* ── Section 2 : Ateliers ── */}
+                    <section>
+                        <h2
+                            className="text-xs font-bold uppercase tracking-widest
+                                       text-slate-400 mb-3"
+                        >
+                            📚 Ateliers
+                        </h2>
+                        <div className="flex flex-col gap-3">
+                            {ATELIERS_LIST.map((a) => (
+                                <AtelierCard
+                                    key={a.id}
+                                    atelier={a}
+                                    students={students}
+                                    traces={traces}
+                                    isActive={launchedAtelier === a.id}
+                                    onOpen={() => onOpenAtelier(a.id)}
+                                />
+                            ))}
+                        </div>
+                    </section>
+                </div>
             </div>
-        </div>
+        </>
     );
 }
 

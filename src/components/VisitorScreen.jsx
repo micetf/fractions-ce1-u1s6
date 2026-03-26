@@ -2,22 +2,15 @@
  * @file VisitorScreen.jsx — écran d'accueil visiteur.
  *
  * @description
- * Premier écran vu par quiconque ouvre l'URL. Propose deux chemins :
- *
- * ── Chemin élève ────────────────────────────────────────────────────
- * Disponible uniquement si une session est active (`launchedAtelier` non null)
- * ET qu'une classe existe (`students.length > 0`).
- * Sinon, un message d'attente est affiché.
- *
- * ── Chemin enseignant·e ─────────────────────────────────────────────
- * Toujours disponible. Protégé par `TeacherConfirmOverlay` (composant
- * partagé avec le retour enseignant par long press depuis le mode élève).
+ * Premier écran vu par quiconque ouvre l'URL.
+ * Rend la Navbar en mode 'visitor' (PayPal + email visibles).
  *
  * @module VisitorScreen
  */
 
 import { useState } from "react";
 import PropTypes from "prop-types";
+import Navbar from "./Navbar.jsx";
 import TeacherConfirmOverlay from "./ui/TeacherConfirmOverlay.jsx";
 
 /**
@@ -27,7 +20,6 @@ import TeacherConfirmOverlay from "./ui/TeacherConfirmOverlay.jsx";
  * @param {Array}       props.students        - Liste des élèves
  * @param {Function}    props.onEnterTeacher  - Bascule en mode enseignant
  * @param {Function}    props.onEnterStudent  - Bascule en mode élève
- * @returns {JSX.Element}
  */
 export default function VisitorScreen({
     launchedAtelier,
@@ -43,8 +35,11 @@ export default function VisitorScreen({
 
     return (
         <>
+            {/* ── Navbar mode visiteur ── */}
+            <Navbar mode="visitor" />
+
             <div
-                className="min-h-screen flex flex-col items-center
+                className="min-h-screen pt-14 flex flex-col items-center
                            justify-center gap-8 p-6"
                 style={{ background: "#F1EDE4" }}
             >
@@ -72,7 +67,6 @@ export default function VisitorScreen({
                             color: atelierMeta.color,
                         }}
                     >
-                        {/* Point animé session active */}
                         <span
                             className="relative flex h-2 w-2"
                             aria-hidden="true"
@@ -149,7 +143,6 @@ export default function VisitorScreen({
                 </div>
             </div>
 
-            {/* Overlay de confirmation — composant partagé */}
             {showConfirm && (
                 <TeacherConfirmOverlay
                     onConfirm={() => {
