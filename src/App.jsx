@@ -10,28 +10,32 @@
  * 4. **Suivi**             (`Dashboard` à deux onglets + `TeacherMenu`)
  *
  * ────────────────────────────────────────────────────────────────
+ * Persistance des traces — traitement incrémental
+ * ────────────────────────────────────────────────────────────────
+ * `processedCountRef` mémorise le nombre d'événements déjà traités.
+ * Le useEffect traite tous les NOUVEAUX événements depuis le dernier
+ * rendu (events.slice(processedCountRef.current)), pas seulement le
+ * dernier.
+ *
+ * Sans ce mécanisme, la dernière situation d'un atelier n'était pas
+ * persistée : SIT_DONE et ATELIER_DONE étant émis dans le même appel
+ * synchrone (doAdvance), React 18 les batchait en un seul rendu —
+ * seul ATELIER_DONE était visible comme "dernier événement".
+ *
+ * Le curseur est remis à zéro quand events revient à [] (resetLog).
+ *
+ * ────────────────────────────────────────────────────────────────
  * Accès à la gestion des élèves
  * ────────────────────────────────────────────────────────────────
  * `handleManageRoster` ouvre le Dashboard directement sur l'onglet
- * "Classe" via la prop `defaultTab`. Il est appelé :
- * - depuis `StudentSelectScreen` (bouton "⚙ Gérer les élèves")
- * - depuis `TeacherMenu` → Dashboard → onglet Classe (chemin existant)
- *
- * Le Dashboard est désormais accessible même si `startTs` est null
- * (avant toute session élève). L'onglet Session est alors masqué.
+ * "Classe". Il est accessible depuis `StudentSelectScreen` avant
+ * toute session (startTs peut être null).
  *
  * ────────────────────────────────────────────────────────────────
  * Ouverture directe via URL
  * ────────────────────────────────────────────────────────────────
  * `?atelier=tg|dq|cu` bypasse SetupScreen et ouvre StudentSelectScreen.
- * `TeacherMenu → Changer d'atelier` met à jour l'URL via replaceState.
- *
- * ────────────────────────────────────────────────────────────────
- * Persistance des traces
- * ────────────────────────────────────────────────────────────────
- * Un useEffect sur `events` détecte SIT_DONE et ATELIER_DONE pour
- * persister incrémentalement via useStudentTraces, sans modifier
- * les ateliers eux-mêmes.
+ * `TeacherMenu → Changer d'atelier` remet l'URL à son état initial.
  *
  * @module App
  */
@@ -70,7 +74,7 @@ function readUrlAtelier() {
 /**
  * Reconstruit un SituationSnapshot persistable depuis le journal d'événements.
  *
- * @param {Array}  events      - Journal complet
+ * @param {Array}  events      - Journal complet (pour retrouver SIT_START et NAME_ERR)
  * @param {Object} sitDoneData - Payload de l'événement SIT_DONE
  * @returns {import('./utils/tracesHelpers.js').SituationSnapshot}
  */
@@ -129,8 +133,7 @@ export default function App() {
 
     /**
      * Onglet cible à l'ouverture du Dashboard.
-     * "session" par défaut, "classe" quand déclenché depuis StudentSelectScreen.
-     * @type {'session'|'classe'}
+     * "session" par défaut, "classe" depuis StudentSelectScreen.
      */
     const [dashDefaultTab, setDashDefaultTab] = useState("session");
 
@@ -143,6 +146,13 @@ export default function App() {
     const { events, log, resetLog } = useEventLog();
     const [startTs, setStartTs] = useState(null);
     const holdRef = useRef(null);
+
+    /**
+     * Curseur de traitement incrémental des événements.
+     * Pointe vers le nombre d'événements déjà persistés.
+     * Remis à 0 à chaque resetLog (events → []).
+     */
+    const processedCountRef = useRef(0);
 
     const { students, addStudent, removeStudent } = useRoster();
     const {
@@ -158,17 +168,29 @@ export default function App() {
     // ── Persistance incrémentale des traces ─────────────────────────────────────
 
     useEffect(() => {
-        if (!activeStudent || !atelier || events.length === 0) return;
-        const last = events[events.length - 1];
-        if (last.type === "SIT_DONE") {
-            appendSituation(
-                atelier,
-                activeStudent.id,
-                buildSnapshot(events, last.data)
-            );
-        } else if (last.type === "ATELIER_DONE") {
-            markCompleted(atelier, activeStudent.id);
+        // Remise à zéro du curseur quand le journal est vidé (resetLog)
+        if (events.length === 0) {
+            processedCountRef.current = 0;
+            return;
         }
+
+        if (!activeStudent || !atelier) return;
+
+        // Traitement de tous les événements non encore persistés
+        const newEvents = events.slice(processedCountRef.current);
+        newEvents.forEach((event) => {
+            if (event.type === "SIT_DONE") {
+                appendSituation(
+                    atelier,
+                    activeStudent.id,
+                    buildSnapshot(events, event.data)
+                );
+            } else if (event.type === "ATELIER_DONE") {
+                markCompleted(atelier, activeStudent.id);
+            }
+        });
+
+        processedCountRef.current = events.length;
     }, [events, activeStudent, atelier, appendSituation, markCompleted]);
 
     // ── Sélection de l'atelier (enseignant·e) ───────────────────────────────────
@@ -207,10 +229,6 @@ export default function App() {
 
     // ── Gestion du registre — accès direct depuis StudentSelectScreen ────────────
 
-    /**
-     * Ouvre le Dashboard sur l'onglet "Classe".
-     * Accessible avant toute session (startTs peut être null).
-     */
     const handleManageRoster = useCallback(() => {
         setDashDefaultTab("classe");
         setShowDash(true);
@@ -248,7 +266,6 @@ export default function App() {
 
     const handleCloseDash = useCallback(() => {
         setShowDash(false);
-        // Réinitialise l'onglet par défaut pour la prochaine ouverture via TeacherMenu
         setDashDefaultTab("session");
     }, []);
 

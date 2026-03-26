@@ -254,30 +254,23 @@ export default function Dashboard({
                                     {current.countErrors > 0 && (
                                         <p className="text-amber-300 text-xs font-semibold mt-1">
                                             {current.countErrors} erreur
-                                            {current.countErrors > 1 ? "s" : ""}{" "}
+                                            {current.countErrors > 1
+                                                ? "s"
+                                                : ""}{" "}
                                             de comptage
                                         </p>
                                     )}
                                     {current.nameErrors > 0 && (
                                         <p className="text-orange-300 text-xs font-semibold">
                                             {current.nameErrors} erreur
-                                            {current.nameErrors > 1 ? "s" : ""}{" "}
+                                            {current.nameErrors > 1
+                                                ? "s"
+                                                : ""}{" "}
                                             de nommage
                                         </p>
                                     )}
                                 </div>
                             )}
-
-                            {/* Pied de page */}
-                            <div
-                                className="rounded-2xl p-3"
-                                style={{ background: "rgba(255,255,255,.06)" }}
-                            >
-                                <p className="text-white/40 text-xs text-center font-semibold">
-                                    CAREC Grenoble · A. Tricot (modes
-                                    opératoires) · Enseignement explicite · S6/6
-                                </p>
-                            </div>
                         </>
                     )}
 

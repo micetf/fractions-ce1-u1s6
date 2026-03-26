@@ -124,11 +124,6 @@ export default function SetupScreen({ onSelect }) {
                     <AtelierCard key={c.id} choice={c} onSelect={onSelect} />
                 ))}
             </div>
-
-            {/* Pied de page institutionnel */}
-            <p className="text-xs text-slate-300 text-center font-semibold">
-                CAREC Grenoble · Enseignement explicite · Séance 6/6
-            </p>
         </div>
     );
 }
