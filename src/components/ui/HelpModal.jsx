@@ -286,40 +286,42 @@ export default function HelpModal({ onClose }) {
                             {/* Sources */}
                             <section>
                                 <SectionTitle>
-                                    Sources théoriques et pédagogiques
+                                    Sources et références
                                 </SectionTitle>
                                 <div
-                                    className="rounded-xl p-3 space-y-2 text-xs"
+                                    className="rounded-xl p-3 space-y-3 text-xs"
                                     style={{ background: "#F8F7F4" }}
                                 >
                                     <p>
-                                        <strong>André Tricot</strong> — Séquence
-                                        pédagogique et modes opératoires. Les
-                                        messages de feedback ne donnent jamais
-                                        la réponse : ils rappellent la procédure
-                                        (combien de parts ?) ou la règle de
-                                        nommage (quand il faut N parts égales,
-                                        on dit…).
+                                        <strong>Mission Maths 37</strong> — Cet
+                                        outil propose une mise en œuvre
+                                        numérique de la séance 6 de leur
+                                        première séquence de découverte des
+                                        fractions au CE1.
                                     </p>
                                     <p>
-                                        <strong>Projet CAREC</strong> —
-                                        Grenoble. Séquence fractions CE1, séance
-                                        6/6.
+                                        <strong>Projet CAREC</strong> — Des
+                                        éléments relatifs aux pratiques
+                                        équitables et efficaces ont été intégrés
+                                        dans la conception de l&apos;outil.
                                     </p>
                                     <p>
                                         <strong>Enseignement explicite</strong>{" "}
-                                        — Modèle structurant la progression :
-                                        prédiction → manipulation → nommage.
-                                        Feedback immédiat et procédural à chaque
-                                        étape.
+                                        — La structure de chaque situation
+                                        (prédiction, manipulation, nommage,
+                                        feedback procédural) s&apos;inspire des
+                                        principes de l&apos;enseignement
+                                        explicite.
                                     </p>
                                     <p>
-                                        <strong>Progression sémiotique</strong>{" "}
-                                        — Les trois ateliers couvrent des
+                                        <strong>Registres sémiotiques</strong> —
+                                        Les trois ateliers mobilisent des
                                         registres de représentation distincts
                                         (figures géométriques, disques,
-                                        réglettes colorées) pour favoriser la
-                                        généralisation du concept de fraction.
+                                        réglettes), en référence aux travaux de
+                                        Raymond Duval sur les registres
+                                        sémiotiques en didactique des
+                                        mathématiques.
                                     </p>
                                 </div>
                             </section>
