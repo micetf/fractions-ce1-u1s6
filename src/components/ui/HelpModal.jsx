@@ -2,25 +2,10 @@
  * @file HelpModal — modale d'aide à deux onglets.
  *
  * @description
- * Extrait de `Navbar.jsx` pour respecter le principe de responsabilité unique :
- * la barre de navigation ne devrait pas contenir ~80 lignes de contenu éditorial.
- *
- * ────────────────────────────────────────────────────────────────
- * Deux onglets
- * ────────────────────────────────────────────────────────────────
- * **Enseignant·e** :
- *   - Navigation et gestes (appui long, tableau de bord)
- *   - Objectif pédagogique de la séance (S6/6)
- *   - Les trois ateliers et leurs fractions couvertes
- *   - Lire le tableau de bord (code couleur des points)
- *
- * **Élève** :
- *   - Les quatre gestes : Ajouter / Valider / Nommer / Continuer
- *
- * ────────────────────────────────────────────────────────────────
- * Fermeture
- * ────────────────────────────────────────────────────────────────
- * Clic sur le fond semi-transparent ou sur le bouton "Fermer".
+ * Deux onglets :
+ * - Enseignant·e : navigation, ateliers, tableau de bord,
+ *   suivi de classe, sources théoriques et pédagogiques.
+ * - Élève : les quatre gestes de manipulation.
  *
  * @module HelpModal
  */
@@ -28,13 +13,19 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
 
-/**
- * Modale d'aide à deux onglets : enseignant·e et élève.
- *
- * @param {Object}   props
- * @param {Function} props.onClose - Ferme la modale
- * @returns {JSX.Element}
- */
+// ─── Sous-composant : titre de section ─────────────────────────────────────────
+
+function SectionTitle({ children }) {
+    return (
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+            {children}
+        </h3>
+    );
+}
+SectionTitle.propTypes = { children: PropTypes.node.isRequired };
+
+// ─── Composant principal ────────────────────────────────────────────────────────
+
 export default function HelpModal({ onClose }) {
     const [tab, setTab] = useState("teacher");
 
@@ -62,11 +53,11 @@ export default function HelpModal({ onClose }) {
                             type="button"
                             onClick={() => setTab("teacher")}
                             className={`px-4 py-2 text-sm font-bold transition-colors border-b-2 -mb-px
-                ${
-                    tab === "teacher"
-                        ? "border-blue-600 text-blue-700"
-                        : "border-transparent text-slate-400 hover:text-slate-600"
-                }`}
+                                ${
+                                    tab === "teacher"
+                                        ? "border-blue-600 text-blue-700"
+                                        : "border-transparent text-slate-400 hover:text-slate-600"
+                                }`}
                         >
                             👩‍🏫 Enseignant·e
                         </button>
@@ -74,11 +65,11 @@ export default function HelpModal({ onClose }) {
                             type="button"
                             onClick={() => setTab("student")}
                             className={`px-4 py-2 text-sm font-bold transition-colors border-b-2 -mb-px
-                ${
-                    tab === "student"
-                        ? "border-emerald-600 text-emerald-700"
-                        : "border-transparent text-slate-400 hover:text-slate-600"
-                }`}
+                                ${
+                                    tab === "student"
+                                        ? "border-emerald-600 text-emerald-700"
+                                        : "border-transparent text-slate-400 hover:text-slate-600"
+                                }`}
                         >
                             🧒 Élève
                         </button>
@@ -90,162 +81,181 @@ export default function HelpModal({ onClose }) {
                     {/* ═══ ONGLET ENSEIGNANT·E ═══ */}
                     {tab === "teacher" && (
                         <div className="space-y-5 text-sm text-slate-700">
+                            {/* Navigation */}
                             <section>
-                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                    Navigation et gestes
-                                </h3>
+                                <SectionTitle>
+                                    Démarrage et navigation
+                                </SectionTitle>
                                 <ul className="space-y-2">
                                     <li>
                                         <strong>Choisir un atelier :</strong>{" "}
-                                        sélectionner l'atelier depuis l'écran
-                                        d'accueil avant de passer la tablette à
-                                        l'élève.
+                                        sélectionner l&apos;atelier depuis
+                                        l&apos;écran d&apos;accueil, puis passer
+                                        la tablette à un élève pour qu&apos;il
+                                        choisisse son prénom.
+                                    </li>
+                                    <li>
+                                        <strong>Accès direct :</strong> ajouter{" "}
+                                        <code className="bg-slate-100 px-1 rounded text-xs">
+                                            ?atelier=tg
+                                        </code>
+                                        ,{" "}
+                                        <code className="bg-slate-100 px-1 rounded text-xs">
+                                            ?atelier=dq
+                                        </code>{" "}
+                                        ou{" "}
+                                        <code className="bg-slate-100 px-1 rounded text-xs">
+                                            ?atelier=cu
+                                        </code>{" "}
+                                        à l&apos;URL pour ouvrir directement un
+                                        atelier au chargement — idéal pour
+                                        configurer les tablettes en avance.
                                     </li>
                                     <li>
                                         <strong>Menu enseignant·e :</strong>{" "}
                                         appui long (2 secondes) sur la zone
-                                        centrale de cette barre (titre + badge
-                                        de l'atelier) pendant l'activité. Permet
-                                        d'ouvrir le tableau de bord ou de
-                                        changer d'atelier.
+                                        centrale de la barre de navigation
+                                        (titre + badge de l&apos;atelier).
+                                        Accessible à tout moment pendant
+                                        l&apos;activité.
                                     </li>
                                     <li>
                                         <strong>Tableau de bord :</strong>{" "}
-                                        accessible également via le bouton{" "}
+                                        accessible aussi via le bouton{" "}
                                         <strong>📊</strong> en haut à droite,
-                                        sans appui long.
+                                        sans appui long — affiche uniquement la
+                                        session élève en cours.
                                     </li>
                                 </ul>
                             </section>
 
+                            {/* Gestion des élèves */}
                             <section>
-                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                    Objectif de la séance (S6/6)
-                                </h3>
-                                <p>
-                                    Nommer des fractions unité à partir d'une
-                                    manipulation physique. Chaque situation suit
-                                    le même enchaînement :
-                                </p>
-                                <ol className="mt-2 space-y-1 list-decimal list-inside">
+                                <SectionTitle>Gestion des élèves</SectionTitle>
+                                <ul className="space-y-2">
                                     <li>
-                                        <strong>Comptage</strong> — combien de
-                                        parts égales faut-il pour reconstituer
-                                        le tout ?
+                                        Ajouter les élèves via{" "}
+                                        <strong>
+                                            Menu enseignant·e → Gérer les élèves
+                                        </strong>
+                                        . Un simple pseudo suffit (ex. :
+                                        «&nbsp;Fred M&nbsp;»).
                                     </li>
                                     <li>
-                                        <strong>Nommage</strong> — quel est le
-                                        nom de cette fraction parmi quatre
-                                        propositions ?
+                                        En fin d&apos;atelier, l&apos;élève
+                                        clique sur{" "}
+                                        <strong>Passer la tablette →</strong>{" "}
+                                        pour revenir à l&apos;écran de
+                                        sélection. L&apos;enseignant·e peut
+                                        aussi déclencher ce changement via{" "}
+                                        <strong>
+                                            Menu → Changer d&apos;élève
+                                        </strong>
+                                        .
                                     </li>
-                                </ol>
-                                <p className="mt-2 text-slate-500 italic">
-                                    Les messages de feedback ne donnent jamais
-                                    la réponse : ils rappellent la procédure
-                                    (combien ?) ou la règle de nommage (quand il
-                                    faut N parts égales, on dit…). Modèle : A.
-                                    Tricot, enseignement explicite — CAREC
-                                    Grenoble.
-                                </p>
+                                    <li>
+                                        Les résultats sont conservés localement
+                                        sur chaque tablette, par atelier.
+                                    </li>
+                                </ul>
                             </section>
 
+                            {/* Les trois ateliers */}
                             <section>
-                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                    Les trois ateliers
-                                </h3>
+                                <SectionTitle>Les trois ateliers</SectionTitle>
                                 <div className="space-y-2">
                                     <div className="rounded-xl p-3 bg-blue-50 border border-blue-100">
                                         <p className="font-bold text-blue-800">
                                             🔷 Atelier 1 — Tangram
                                         </p>
-                                        <p className="text-blue-700 text-xs mt-0.5">
+                                        <p className="text-blue-600 text-xs mt-0.5">
                                             5 situations · Fractions du carré
                                         </p>
-                                        <p className="mt-1">
-                                            Fractions couvertes : un demi (×2),
-                                            un quart (×2), un huitième.
+                                        <p className="mt-1 text-xs">
+                                            Fractions : un demi (×2), un quart
+                                            (×2), un huitième.
                                         </p>
                                     </div>
                                     <div className="rounded-xl p-3 bg-purple-50 border border-purple-100">
                                         <p className="font-bold text-purple-800">
                                             ⭕ Atelier 2 — Disques
                                         </p>
-                                        <p className="text-purple-700 text-xs mt-0.5">
+                                        <p className="text-purple-600 text-xs mt-0.5">
                                             7 situations · Fractions du disque
                                         </p>
-                                        <p className="mt-1">
-                                            Fractions couvertes : un demi, un
-                                            tiers, un quart, un cinquième, un
-                                            sixième, un huitième, un dixième.
+                                        <p className="mt-1 text-xs">
+                                            Fractions : un demi, un tiers, un
+                                            quart, un cinquième, un sixième, un
+                                            huitième, un dixième.
                                         </p>
                                     </div>
                                     <div className="rounded-xl p-3 bg-amber-50 border border-amber-100">
                                         <p className="font-bold text-amber-800">
                                             📏 Atelier 3 — Cuisenaire
                                         </p>
-                                        <p className="text-amber-700 text-xs mt-0.5">
+                                        <p className="text-amber-600 text-xs mt-0.5">
                                             6 situations · Fractions des
                                             réglettes
                                         </p>
-                                        <p className="mt-1">
-                                            Fractions couvertes : un dixième, un
+                                        <p className="mt-1 text-xs">
+                                            Fractions : un dixième, un
                                             cinquième, un demi, un tiers, un
-                                            sixième, deux cinquièmes.
-                                        </p>
-                                        <p className="mt-1 text-amber-800">
-                                            <strong>
-                                                Situation non-unitaire
-                                            </strong>{" "}
-                                            (réglette violette = deux
-                                            cinquièmes) : pas de phase de
-                                            comptage. Une décomposition visuelle
-                                            est affichée à l'écran ;
-                                            l'enseignant·e commente le
-                                            raisonnement avant que l'élève nomme
-                                            la fraction.
+                                            sixième, <em>deux cinquièmes</em>{" "}
+                                            (situation non-unitaire — phase
+                                            d&apos;explication guidée, pas de
+                                            comptage).
                                         </p>
                                     </div>
                                 </div>
                             </section>
 
+                            {/* Lire le tableau de bord */}
                             <section>
-                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                <SectionTitle>
                                     Lire le tableau de bord
-                                </h3>
+                                </SectionTitle>
                                 <p className="mb-2">
+                                    Accessible via le bouton <strong>📊</strong>{" "}
+                                    (session en cours) ou le menu enseignant·e.
                                     Chaque situation terminée est représentée
-                                    par un point coloré dans la frise :
+                                    par un point coloré :
                                 </p>
                                 <ul className="space-y-1.5">
-                                    <li className="flex items-center gap-2">
-                                        <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
-                                        <span>
-                                            <strong>Vert</strong> — réussi sans
-                                            aucune erreur (comptage et nommage
-                                            du premier coup).
-                                        </span>
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <span className="w-3 h-3 rounded-full bg-amber-400 shrink-0" />
-                                        <span>
-                                            <strong>Ambre</strong> — réussi avec
-                                            1 ou 2 erreurs au total.
-                                        </span>
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <span className="w-3 h-3 rounded-full bg-orange-400 shrink-0" />
-                                        <span>
-                                            <strong>Orange</strong> — réussi
-                                            avec 3 erreurs ou plus.
-                                        </span>
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0" />
-                                        <span>
-                                            <strong>Bleu</strong> — situation en
-                                            cours.
-                                        </span>
-                                    </li>
+                                    {[
+                                        {
+                                            color: "bg-emerald-500",
+                                            label: "Vert",
+                                            desc: "réussi sans erreur (1er essai).",
+                                        },
+                                        {
+                                            color: "bg-amber-400",
+                                            label: "Ambre",
+                                            desc: "réussi avec 1 ou 2 erreurs.",
+                                        },
+                                        {
+                                            color: "bg-orange-400",
+                                            label: "Orange",
+                                            desc: "réussi avec 3 erreurs ou plus.",
+                                        },
+                                        {
+                                            color: "bg-blue-500",
+                                            label: "Bleu",
+                                            desc: "situation en cours.",
+                                        },
+                                    ].map(({ color, label, desc }) => (
+                                        <li
+                                            key={label}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <span
+                                                className={`w-3 h-3 rounded-full shrink-0 ${color}`}
+                                            />
+                                            <span>
+                                                <strong>{label}</strong> —{" "}
+                                                {desc}
+                                            </span>
+                                        </li>
+                                    ))}
                                 </ul>
                                 <p className="mt-2">
                                     La section <em>Erreurs repérées</em> liste
@@ -253,12 +263,65 @@ export default function HelpModal({ onClose }) {
                                     nommage : ce sont les conceptions à
                                     exploiter lors de la mise en commun.
                                 </p>
-                                <p className="mt-1">
-                                    Le bouton <strong>🖨 Imprimer</strong>{" "}
-                                    produit une version imprimable du tableau de
-                                    bord (les éléments de navigation
-                                    disparaissent à l'impression).
+                            </section>
+
+                            {/* Suivi de classe */}
+                            <section>
+                                <SectionTitle>
+                                    Suivi de classe (après séance)
+                                </SectionTitle>
+                                <p>
+                                    Via{" "}
+                                    <strong>
+                                        Menu → Gérer les élèves → onglet Suivi
+                                        classe
+                                    </strong>
+                                    . Accessible atelier par atelier, depuis
+                                    chaque tablette. Cliquer sur un élève
+                                    affiche son bilan complet : prédiction,
+                                    nommage, durée par situation, distracteurs.
                                 </p>
+                            </section>
+
+                            {/* Sources */}
+                            <section>
+                                <SectionTitle>
+                                    Sources théoriques et pédagogiques
+                                </SectionTitle>
+                                <div
+                                    className="rounded-xl p-3 space-y-2 text-xs"
+                                    style={{ background: "#F8F7F4" }}
+                                >
+                                    <p>
+                                        <strong>André Tricot</strong> — Séquence
+                                        pédagogique et modes opératoires. Les
+                                        messages de feedback ne donnent jamais
+                                        la réponse : ils rappellent la procédure
+                                        (combien de parts ?) ou la règle de
+                                        nommage (quand il faut N parts égales,
+                                        on dit…).
+                                    </p>
+                                    <p>
+                                        <strong>Projet CAREC</strong> —
+                                        Grenoble. Séquence fractions CE1, séance
+                                        6/6.
+                                    </p>
+                                    <p>
+                                        <strong>Enseignement explicite</strong>{" "}
+                                        — Modèle structurant la progression :
+                                        prédiction → manipulation → nommage.
+                                        Feedback immédiat et procédural à chaque
+                                        étape.
+                                    </p>
+                                    <p>
+                                        <strong>Progression sémiotique</strong>{" "}
+                                        — Les trois ateliers couvrent des
+                                        registres de représentation distincts
+                                        (figures géométriques, disques,
+                                        réglettes colorées) pour favoriser la
+                                        généralisation du concept de fraction.
+                                    </p>
+                                </div>
                             </section>
                         </div>
                     )}
@@ -267,60 +330,70 @@ export default function HelpModal({ onClose }) {
                     {tab === "student" && (
                         <div className="space-y-4 text-sm text-slate-700">
                             <p className="text-slate-500 italic">
-                                À lire avec l'élève lors du premier passage, ou
-                                à projeter au tableau.
+                                À lire avec l&apos;élève lors du premier
+                                passage, ou à projeter au tableau.
                             </p>
+
                             <section>
-                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
-                                    Comment ça marche ?
-                                </h3>
-                                <ol className="space-y-4 list-none">
-                                    <li className="flex gap-3 items-start">
-                                        <span className="text-2xl shrink-0">
-                                            ➕
-                                        </span>
-                                        <span>
-                                            <strong>Ajouter</strong> — appuie
-                                            sur le bouton pour poser une pièce,
-                                            un secteur ou une réglette. Tu peux
-                                            aussi en retirer avec le bouton ↩.
-                                        </span>
-                                    </li>
-                                    <li className="flex gap-3 items-start">
-                                        <span className="text-2xl shrink-0">
-                                            ✓
-                                        </span>
-                                        <span>
-                                            <strong>Valider</strong> — quand le
-                                            tout est bien rempli, appuie sur le
-                                            bouton de validation. L'application
-                                            te dira si c'est correct.
-                                        </span>
-                                    </li>
-                                    <li className="flex gap-3 items-start">
-                                        <span className="text-2xl shrink-0">
-                                            🔤
-                                        </span>
-                                        <span>
-                                            <strong>Nommer</strong> — choisis
-                                            parmi les quatre mots celui qui
-                                            correspond à la fraction. Tu as le
-                                            droit de te tromper : un message
-                                            t'aide à trouver.
-                                        </span>
-                                    </li>
-                                    <li className="flex gap-3 items-start">
-                                        <span className="text-2xl shrink-0">
-                                            ▶
-                                        </span>
-                                        <span>
-                                            <strong>Continuer</strong> — quand
-                                            le message vert apparaît, appuie sur
-                                            "Continuer →" pour passer à la
-                                            situation suivante.
-                                        </span>
-                                    </li>
+                                <SectionTitle>Avant de commencer</SectionTitle>
+                                <p>
+                                    Cherche ton prénom dans la liste et appuie
+                                    sur <strong>C&apos;est moi !</strong>
+                                </p>
+                            </section>
+
+                            <section>
+                                <SectionTitle>Comment ça marche ?</SectionTitle>
+                                <ol className="space-y-3 list-none">
+                                    {[
+                                        {
+                                            icon: "🔢",
+                                            title: "Prédire",
+                                            desc: "Combien de pièces faut-il pour remplir le tout ? Donne ton estimation.",
+                                        },
+                                        {
+                                            icon: "➕",
+                                            title: "Ajouter",
+                                            desc: 'Ajoute les pièces une à une, puis appuie sur le bouton de validation ("Le carré est rempli !", etc.).',
+                                        },
+                                        {
+                                            icon: "🏷",
+                                            title: "Nommer",
+                                            desc: "Choisis le nom de la fraction parmi les quatre propositions. Tu as le droit de te tromper : un message t'aide à trouver.",
+                                        },
+                                        {
+                                            icon: "▶",
+                                            title: "Continuer",
+                                            desc: 'Quand le message vert apparaît, appuie sur "Continuer →" pour passer à la suite.',
+                                        },
+                                    ].map(({ icon, title, desc }) => (
+                                        <li
+                                            key={title}
+                                            className="flex gap-3 items-start"
+                                        >
+                                            <span className="text-2xl shrink-0">
+                                                {icon}
+                                            </span>
+                                            <span>
+                                                <strong>{title}</strong> —{" "}
+                                                {desc}
+                                            </span>
+                                        </li>
+                                    ))}
                                 </ol>
+                            </section>
+
+                            <section>
+                                <SectionTitle>
+                                    En fin d&apos;atelier
+                                </SectionTitle>
+                                <p>
+                                    Appuie sur{" "}
+                                    <strong>Passer la tablette →</strong> pour
+                                    laisser la place au prochain élève, ou sur{" "}
+                                    <strong>↺ Recommencer</strong> pour refaire
+                                    l&apos;atelier.
+                                </p>
                             </section>
                         </div>
                     )}
@@ -331,7 +404,7 @@ export default function HelpModal({ onClose }) {
                     <button
                         onClick={onClose}
                         className="w-full py-2.5 rounded-xl bg-slate-800 text-white
-                       font-bold text-sm hover:bg-slate-700 transition-colors"
+                                   font-bold text-sm hover:bg-slate-700 transition-colors"
                     >
                         Fermer
                     </button>
@@ -342,6 +415,5 @@ export default function HelpModal({ onClose }) {
 }
 
 HelpModal.propTypes = {
-    /** Callback de fermeture — clic sur le fond ou sur "Fermer" */
     onClose: PropTypes.func.isRequired,
 };

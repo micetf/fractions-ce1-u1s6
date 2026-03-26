@@ -234,12 +234,7 @@ export default function Dashboard({
                                         style={{
                                             background: "rgba(255,255,255,.06)",
                                         }}
-                                    >
-                                        <p className="text-white/40 text-xs text-center font-semibold">
-                                            CAREC Grenoble · A. Tricot ·
-                                            Enseignement explicite · S6/6
-                                        </p>
-                                    </div>
+                                    ></div>
                                 </>
                             ) : (
                                 <div

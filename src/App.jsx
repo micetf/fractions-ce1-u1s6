@@ -266,10 +266,6 @@ export default function App() {
                         />
                     )}
                 </div>
-                <p className="text-center text-xs text-slate-300 font-semibold mt-4 no-print">
-                    Séquence fractions CE1 · Séance 6/6 · CAREC Grenoble · A.
-                    Tricot
-                </p>
             </main>
 
             {showStudentSelect && (
