@@ -4,31 +4,31 @@
  * @description
  * Orchestre les quatre couches de l'application :
  *
- * 1. **Sélection atelier** (`SetupScreen`)   — l'enseignant·e choisit l'atelier
+ * 1. **Sélection atelier** (`SetupScreen`)        — l'enseignant·e choisit l'atelier
  * 2. **Sélection élève**   (`StudentSelectScreen`) — l'élève s'identifie
  * 3. **Activité**          (AtelierTangram / AtelierDisques / AtelierCuisenaire)
- * 4. **Suivi**             (`Dashboard` + `TeacherMenu`)
+ * 4. **Suivi**             (`Dashboard` à deux onglets + `TeacherMenu`)
  *
  * ────────────────────────────────────────────────────────────────
  * Ouverture directe via URL
  * ────────────────────────────────────────────────────────────────
  * `?atelier=tg|dq|cu` bypasse SetupScreen et ouvre StudentSelectScreen
- * directement. L'enseignant·e bookmarke l'URL sur chaque tablette.
- * `TeacherMenu → Changer d'atelier` met à jour l'URL via replaceState.
+ * directement. `TeacherMenu → Changer d'atelier` met à jour l'URL
+ * via history.replaceState.
  *
  * ────────────────────────────────────────────────────────────────
  * Persistance des traces
  * ────────────────────────────────────────────────────────────────
  * Un useEffect sur `events` détecte SIT_DONE et ATELIER_DONE pour
  * persister incrémentalement via useStudentTraces, sans modifier
- * les ateliers eux-mêmes. buildSnapshot() reconstruit le snapshot
- * complet depuis le journal d'événements courant.
+ * les ateliers eux-mêmes.
  *
  * ────────────────────────────────────────────────────────────────
  * Refresh de page
  * ────────────────────────────────────────────────────────────────
- * L'atelier est restauré depuis l'URL. L'élève actif n'est PAS restauré
- * (comportement intentionnel — StudentSelectScreen s'affiche à nouveau).
+ * L'atelier est restauré depuis l'URL. L'élève actif n'est PAS
+ * restauré — StudentSelectScreen s'affiche à nouveau (comportement
+ * intentionnel en contexte classe).
  *
  * @module App
  */
@@ -56,7 +56,7 @@ const LONG_PRESS_DELAY = 2000;
 /** Identifiants d'ateliers valides pour la lecture du paramètre URL. */
 const VALID_ATELIERS = ["tg", "dq", "cu"];
 
-// ─── Helper : lecture du paramètre URL ─────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 /** @returns {string|null} Identifiant d'atelier valide ou null. */
 function readUrlAtelier() {
@@ -64,13 +64,10 @@ function readUrlAtelier() {
     return VALID_ATELIERS.includes(p) ? p : null;
 }
 
-// ─── Helper : construction du snapshot depuis les événements ───────────────────
-
 /**
- * Reconstruit un SituationSnapshot persistable depuis le journal d'événements
- * et les données d'un événement SIT_DONE.
+ * Reconstruit un SituationSnapshot persistable depuis le journal d'événements.
  *
- * @param {import('./hooks/useEventLog.js').LogEvent[]} events
+ * @param {Array}  events      - Journal complet
  * @param {Object} sitDoneData - Payload de l'événement SIT_DONE
  * @returns {import('./utils/tracesHelpers.js').SituationSnapshot}
  */
@@ -117,7 +114,7 @@ function buildSnapshot(events, sitDoneData) {
  * @returns {JSX.Element}
  */
 export default function App() {
-    // ── État global ─────────────────────────────────────────────────────────────
+    // ── État de navigation ──────────────────────────────────────────────────────
 
     const urlAtelier = readUrlAtelier();
     const [atelier, setAtelier] = useState(urlAtelier);
@@ -127,17 +124,8 @@ export default function App() {
     const [showMenu, setShowMenu] = useState(false);
     const [showDash, setShowDash] = useState(false);
 
-    /**
-     * Élève actif en session. null = StudentSelectScreen affiché.
-     * Non persisté (refresh = re-sélection).
-     * @type {import('./hooks/useRoster.js').Student|null}
-     */
+    /** Élève actif en session. null = StudentSelectScreen affiché. */
     const [activeStudent, setActiveStudent] = useState(null);
-
-    /**
-     * true quand un atelier est chargé mais qu'aucun élève n'est sélectionné.
-     * Initialisé à true si un atelier est déjà fourni par l'URL.
-     */
     const [showStudentSelect, setShowStudentSelect] = useState(!!urlAtelier);
 
     // ── Hooks ───────────────────────────────────────────────────────────────────
@@ -145,8 +133,20 @@ export default function App() {
     const { events, log, resetLog } = useEventLog();
     const [startTs, setStartTs] = useState(null);
     const holdRef = useRef(null);
-    const { students } = useRoster();
-    const { openSession, appendSituation, markCompleted } = useStudentTraces();
+
+    // Roster — CRUD complet (addStudent / removeStudent transmis au Dashboard)
+    const { students, addStudent, removeStudent } = useRoster();
+
+    // Traces — opérations de session + API de réinitialisation complète
+    const {
+        traces,
+        openSession,
+        appendSituation,
+        markCompleted,
+        resetStudent,
+        resetAtelier,
+        resetAll,
+    } = useStudentTraces();
 
     // ── Persistance incrémentale des traces ─────────────────────────────────────
 
@@ -191,7 +191,6 @@ export default function App() {
         [atelier, openSession, resetLog]
     );
 
-    /** Réinitialise la session élève sans changer d'atelier. */
     const handleChangeStudent = useCallback(() => {
         setActiveStudent(null);
         setShowStudentSelect(true);
@@ -271,7 +270,7 @@ export default function App() {
                 </p>
             </main>
 
-            {/* Sélection de l'élève — overlay z-40, sous la Navbar z-50 */}
+            {/* Sélection de l'élève — overlay z-40, sous Navbar z-50 */}
             {showStudentSelect && (
                 <StudentSelectScreen
                     students={students}
@@ -290,13 +289,21 @@ export default function App() {
                 />
             )}
 
-            {/* Dashboard — conditionné à startTs pour éviter un timer null */}
+            {/* Dashboard — deux onglets Session + Classe */}
             {showDash && startTs && (
                 <Dashboard
                     events={events}
                     atelierMeta={{ ...m, total: totalSits }}
                     startTs={startTs}
                     onClose={() => setShowDash(false)}
+                    students={students}
+                    traces={traces}
+                    atelierID={atelier}
+                    addStudent={addStudent}
+                    removeStudent={removeStudent}
+                    resetStudent={resetStudent}
+                    resetAtelier={resetAtelier}
+                    resetAll={resetAll}
                 />
             )}
         </div>
