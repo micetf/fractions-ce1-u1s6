@@ -78,7 +78,7 @@ const MAX_SCORE = TG.length * 2;
  * @param {Object}   props
  * @param {Function} props.log - Émetteur d'événements pédagogiques
  */
-export default function AtelierTangram({ log, onDone }) {
+export default function AtelierTangram({ log, onDone, onPrint }) {
     const [idx, setIdx] = useState(0);
     const [placed, setPlaced] = useState(0);
     const [phase, setPhase] = useState("predict");
@@ -295,6 +295,7 @@ export default function AtelierTangram({ log, onDone }) {
                 label="Tangram"
                 onReset={reset}
                 onDone={onDone}
+                onPrint={onPrint}
                 color={COLOR}
             />
         );
@@ -442,4 +443,5 @@ export default function AtelierTangram({ log, onDone }) {
 AtelierTangram.propTypes = {
     log: PropTypes.func.isRequired,
     onDone: PropTypes.func.isRequired,
+    onPrint: PropTypes.func.isRequired,
 };

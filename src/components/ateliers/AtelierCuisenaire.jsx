@@ -79,7 +79,7 @@ const MAX_SCORE = CUI.length * 2 - 1;
  * @param {Object}   props
  * @param {Function} props.log - Émetteur d'événements pédagogiques
  */
-export default function AtelierCuisenaire({ log, onDone }) {
+export default function AtelierCuisenaire({ log, onDone, onPrint }) {
     const [idx, setIdx] = useState(0);
     const [placed, setPlaced] = useState(0);
     const [phase, setPhase] = useState("predict");
@@ -321,6 +321,7 @@ export default function AtelierCuisenaire({ log, onDone }) {
                 label="Cuisenaire"
                 onReset={reset}
                 onDone={onDone}
+                onPrint={onPrint}
                 color={COLOR}
             />
         );
@@ -477,4 +478,5 @@ export default function AtelierCuisenaire({ log, onDone }) {
 AtelierCuisenaire.propTypes = {
     log: PropTypes.func.isRequired,
     onDone: PropTypes.func.isRequired,
+    onPrint: PropTypes.func.isRequired,
 };

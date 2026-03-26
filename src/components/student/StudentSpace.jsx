@@ -3,13 +3,17 @@
  *
  * @description
  * Gère deux sous-états :
- * - `activeStudent === null` → StudentSelectScreen (choix du prénom)
- * - `activeStudent !== null` → Atelier actif + Dashboard résultats propres
+ * - `activeStudent === null` → StudentSelectScreen
+ * - `activeStudent !== null` → Atelier actif
  *
- * La Navbar est présente dans les deux cas. Sur l'écran de sélection,
- * la zone centrale affiche le badge atelier (sans badge élève) et le
- * long press fonctionne déjà — permettant à l'enseignant de reprendre
- * la main même avant qu'un élève ait été sélectionné.
+ * Le handler `onPrint` passé aux ateliers ouvre le Dashboard élève
+ * (`setShowDash(true)`) — les `events` sont encore en mémoire à ce stade
+ * (le `DoneScreen` est affiché, `resetLog()` n'a pas encore été appelé).
+ * Le Dashboard affiche le détail complet de la session et son propre
+ * bouton 🖨 Imprimer qui déclenche `window.print()`.
+ *
+ * Flux impression :
+ *   DoneScreen → onPrint() → setShowDash(true) → Dashboard → window.print()
  *
  * @module student/StudentSpace
  */
@@ -41,7 +45,6 @@ import TeacherConfirmOverlay from "../ui/TeacherConfirmOverlay.jsx";
  * @param {boolean}     props.showTeacherConfirm     - Affiche l'overlay de confirmation
  * @param {Function}    props.onConfirmTeacher       - Bascule en mode enseignant
  * @param {Function}    props.onCancelTeacherConfirm - Annule et reste en mode élève
- * @returns {JSX.Element}
  */
 export default function StudentSpace({
     atelierMeta,
@@ -62,13 +65,18 @@ export default function StudentSpace({
     const [showDash, setShowDash] = useState(false);
     const hasSitDone = events.some((e) => e.type === "SIT_DONE");
 
-    // ── Navbar partagée par les deux sous-états ────────────────────────────────
-    // Présente dès l'écran de sélection : badge atelier visible, long press actif.
+    /**
+     * Ouvre le Dashboard élève depuis le DoneScreen pour impression.
+     * Les `events` sont encore en mémoire à ce stade.
+     */
+    const handlePrint = () => setShowDash(true);
+
+    // ── Navbar commune aux deux sous-états ────────────────────────────────────
     const navbar = (
         <Navbar
             mode="student"
             atelierMeta={atelierMeta}
-            activeStudent={activeStudent} // null sur select screen → pas de badge élève
+            activeStudent={activeStudent}
             onLongPressStart={onLongPressStart}
             onLongPressEnd={onLongPressEnd}
             hasSitDone={hasSitDone}
@@ -91,7 +99,6 @@ export default function StudentSpace({
                         onSelect={onSelectStudent}
                     />
                 </div>
-
                 {showTeacherConfirm && (
                     <TeacherConfirmOverlay
                         onConfirm={onConfirmTeacher}
@@ -124,6 +131,7 @@ export default function StudentSpace({
                                 key={`tg-${activeStudent.id}`}
                                 log={log}
                                 onDone={onNextStudent}
+                                onPrint={handlePrint}
                             />
                         )}
                         {launchedAtelier === "dq" && (
@@ -131,6 +139,7 @@ export default function StudentSpace({
                                 key={`dq-${activeStudent.id}`}
                                 log={log}
                                 onDone={onNextStudent}
+                                onPrint={handlePrint}
                             />
                         )}
                         {launchedAtelier === "cu" && (
@@ -138,6 +147,7 @@ export default function StudentSpace({
                                 key={`cu-${activeStudent.id}`}
                                 log={log}
                                 onDone={onNextStudent}
+                                onPrint={handlePrint}
                             />
                         )}
                     </div>
