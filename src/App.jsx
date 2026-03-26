@@ -2,55 +2,112 @@
  * @file App.jsx — composant racine de l'application Fractions CE1.
  *
  * @description
- * Orchestre les trois couches de l'application :
+ * Orchestre les quatre couches de l'application :
  *
- * 1. **Sélection** (`SetupScreen`)   — l'enseignant·e choisit l'atelier
- * 2. **Activité**  (AtelierTangram / AtelierDisques / AtelierCuisenaire)
- * 3. **Suivi**     (`Dashboard` + `TeacherMenu`)
- *
- * ────────────────────────────────────────────────────────────────
- * Navbar unifiée
- * ────────────────────────────────────────────────────────────────
- * L'ancien <header> dédié aux ateliers a été supprimé.
- * `Navbar` reçoit des props contextuelles :
- * - Sur SetupScreen : atelierMeta=null → titre fixe uniquement
- * - Sur un atelier  : atelierMeta + handlers → zone d'appui long
- *   (titre + badge) et bouton 📊 intégrés dans la même barre.
+ * 1. **Sélection atelier** (`SetupScreen`)   — l'enseignant·e choisit l'atelier
+ * 2. **Sélection élève**   (`StudentSelectScreen`) — l'élève s'identifie
+ * 3. **Activité**          (AtelierTangram / AtelierDisques / AtelierCuisenaire)
+ * 4. **Suivi**             (`Dashboard` + `TeacherMenu`)
  *
  * ────────────────────────────────────────────────────────────────
- * Accès enseignant·e — appui long (≥ 2 s) sur la zone centrale
+ * Ouverture directe via URL
  * ────────────────────────────────────────────────────────────────
- * Un setTimeout de 2 000 ms déclenché sur pointerdown ouvre le
- * TeacherMenu. Le timer est annulé si le pointeur quitte la zone.
+ * `?atelier=tg|dq|cu` bypasse SetupScreen et ouvre StudentSelectScreen
+ * directement. L'enseignant·e bookmarke l'URL sur chaque tablette.
+ * `TeacherMenu → Changer d'atelier` met à jour l'URL via replaceState.
  *
  * ────────────────────────────────────────────────────────────────
- * État global minimal
+ * Persistance des traces
  * ────────────────────────────────────────────────────────────────
- * - atelier    : identifiant de l'atelier sélectionné ou null
- * - totalSits  : nombre de situations (pour le Dashboard)
- * - events     : journal géré par useEventLog
- * - showMenu   : TeacherMenu visible
- * - showDash   : Dashboard visible
+ * Un useEffect sur `events` détecte SIT_DONE et ATELIER_DONE pour
+ * persister incrémentalement via useStudentTraces, sans modifier
+ * les ateliers eux-mêmes. buildSnapshot() reconstruit le snapshot
+ * complet depuis le journal d'événements courant.
  *
- * Pas de Context API : prop drilling limité à deux niveaux.
+ * ────────────────────────────────────────────────────────────────
+ * Refresh de page
+ * ────────────────────────────────────────────────────────────────
+ * L'atelier est restauré depuis l'URL. L'élève actif n'est PAS restauré
+ * (comportement intentionnel — StudentSelectScreen s'affiche à nouveau).
+ *
+ * @module App
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 import { useEventLog } from "./hooks/useEventLog.js";
+import { useRoster } from "./hooks/useRoster.js";
+import { useStudentTraces } from "./hooks/useStudentTraces.js";
 import Navbar from "./components/Navbar.jsx";
 import SetupScreen from "./components/SetupScreen.jsx";
 import TeacherMenu from "./components/TeacherMenu.jsx";
 import Dashboard from "./components/dashboard/Dashboard.jsx";
+import StudentSelectScreen from "./components/roster/StudentSelectScreen.jsx";
 import AtelierTangram from "./components/ateliers/AtelierTangram.jsx";
 import AtelierDisques from "./components/ateliers/AtelierDisques.jsx";
 import AtelierCuisenaire from "./components/ateliers/AtelierCuisenaire.jsx";
 import { ATELIERS } from "./data/ateliers.js";
 
-// ─── Métadonnées des ateliers ───────────────────────────────────────────────────
+// ─── Constantes ────────────────────────────────────────────────────────────────
 
-/** Durée de l'appui long déclenchant le TeacherMenu (ms) */
+/** Durée de l'appui long déclenchant le TeacherMenu (ms). */
 const LONG_PRESS_DELAY = 2000;
+
+/** Identifiants d'ateliers valides pour la lecture du paramètre URL. */
+const VALID_ATELIERS = ["tg", "dq", "cu"];
+
+// ─── Helper : lecture du paramètre URL ─────────────────────────────────────────
+
+/** @returns {string|null} Identifiant d'atelier valide ou null. */
+function readUrlAtelier() {
+    const p = new URLSearchParams(window.location.search).get("atelier");
+    return VALID_ATELIERS.includes(p) ? p : null;
+}
+
+// ─── Helper : construction du snapshot depuis les événements ───────────────────
+
+/**
+ * Reconstruit un SituationSnapshot persistable depuis le journal d'événements
+ * et les données d'un événement SIT_DONE.
+ *
+ * @param {import('./hooks/useEventLog.js').LogEvent[]} events
+ * @param {Object} sitDoneData - Payload de l'événement SIT_DONE
+ * @returns {import('./utils/tracesHelpers.js').SituationSnapshot}
+ */
+function buildSnapshot(events, sitDoneData) {
+    const {
+        idx,
+        label,
+        predictCorrect,
+        countErrors,
+        nameErrors,
+        durationMs,
+        fullScore,
+    } = sitDoneData;
+    const start = events.find(
+        (e) => e.type === "SIT_START" && e.data.idx === idx
+    );
+    const distractors = events
+        .filter((e) => e.type === "NAME_ERR" && e.data.idx === idx)
+        .map((e) => ({ chosen: e.data.chosen, answer: e.data.answer }));
+    const status = fullScore
+        ? "perfect"
+        : nameErrors <= 2
+          ? "good"
+          : "struggled";
+    return {
+        idx,
+        id: start?.data.id ?? `sit${idx}`,
+        label,
+        status,
+        predictCorrect: predictCorrect ?? null,
+        countErrors: countErrors ?? 0,
+        nameErrors: nameErrors ?? 0,
+        durationMs,
+        fullScore,
+        distractors,
+    };
+}
 
 // ─── Composant ─────────────────────────────────────────────────────────────────
 
@@ -60,54 +117,116 @@ const LONG_PRESS_DELAY = 2000;
  * @returns {JSX.Element}
  */
 export default function App() {
-    const [atelier, setAtelier] = useState(null);
-    const [totalSits, setTotalSits] = useState(0);
+    // ── État global ─────────────────────────────────────────────────────────────
+
+    const urlAtelier = readUrlAtelier();
+    const [atelier, setAtelier] = useState(urlAtelier);
+    const [totalSits, setTotalSits] = useState(
+        urlAtelier ? ATELIERS[urlAtelier].total : 0
+    );
     const [showMenu, setShowMenu] = useState(false);
     const [showDash, setShowDash] = useState(false);
 
-    const { events, log, resetLog } = useEventLog();
     /**
-     * startTs est un état (et non une ref) car il est lu pendant le rendu
-     * pour être passé en prop à Dashboard. Accéder à ref.current pendant
-     * le rendu provoque l'erreur react-hooks/refs.
+     * Élève actif en session. null = StudentSelectScreen affiché.
+     * Non persisté (refresh = re-sélection).
+     * @type {import('./hooks/useRoster.js').Student|null}
      */
+    const [activeStudent, setActiveStudent] = useState(null);
+
+    /**
+     * true quand un atelier est chargé mais qu'aucun élève n'est sélectionné.
+     * Initialisé à true si un atelier est déjà fourni par l'URL.
+     */
+    const [showStudentSelect, setShowStudentSelect] = useState(!!urlAtelier);
+
+    // ── Hooks ───────────────────────────────────────────────────────────────────
+
+    const { events, log, resetLog } = useEventLog();
     const [startTs, setStartTs] = useState(null);
     const holdRef = useRef(null);
+    const { students } = useRoster();
+    const { openSession, appendSituation, markCompleted } = useStudentTraces();
 
-    // ── Sélection de l'atelier ──────────────────────────────────────────────────
+    // ── Persistance incrémentale des traces ─────────────────────────────────────
+
+    useEffect(() => {
+        if (!activeStudent || !atelier || events.length === 0) return;
+        const last = events[events.length - 1];
+        if (last.type === "SIT_DONE") {
+            appendSituation(
+                atelier,
+                activeStudent.id,
+                buildSnapshot(events, last.data)
+            );
+        } else if (last.type === "ATELIER_DONE") {
+            markCompleted(atelier, activeStudent.id);
+        }
+    }, [events, activeStudent, atelier, appendSituation, markCompleted]);
+
+    // ── Sélection de l'atelier (enseignant·e) ───────────────────────────────────
+
     const selectAtelier = useCallback(
         (id, total) => {
             resetLog();
             setAtelier(id);
             setTotalSits(total);
-            setStartTs(Date.now());
+            setActiveStudent(null);
+            setShowStudentSelect(true);
+            history.replaceState(null, "", `?atelier=${id}`);
         },
         [resetLog]
     );
 
+    // ── Sélection de l'élève ────────────────────────────────────────────────────
+
+    const handleSelectStudent = useCallback(
+        (student) => {
+            resetLog();
+            setStartTs(Date.now());
+            openSession(atelier, student.id);
+            setActiveStudent(student);
+            setShowStudentSelect(false);
+        },
+        [atelier, openSession, resetLog]
+    );
+
+    /** Réinitialise la session élève sans changer d'atelier. */
+    const handleChangeStudent = useCallback(() => {
+        setActiveStudent(null);
+        setShowStudentSelect(true);
+        setShowMenu(false);
+        resetLog();
+    }, [resetLog]);
+
     // ── Appui long — accès menu enseignant·e ────────────────────────────────────
+
     const startHold = useCallback(() => {
         holdRef.current = setTimeout(() => setShowMenu(true), LONG_PRESS_DELAY);
     }, []);
 
-    const endHold = useCallback(() => {
-        clearTimeout(holdRef.current);
-    }, []);
+    const endHold = useCallback(() => clearTimeout(holdRef.current), []);
 
     // ── Handlers TeacherMenu ────────────────────────────────────────────────────
+
     const handleOpenDash = useCallback(() => {
         setShowDash(true);
         setShowMenu(false);
     }, []);
-    const handleChangeAtel = useCallback(() => {
-        setAtelier(null);
-        setShowMenu(false);
-    }, []);
-    const handleCloseMenu = useCallback(() => {
-        setShowMenu(false);
-    }, []);
 
-    // ── Écran de sélection ──────────────────────────────────────────────────────
+    const handleChangeAtel = useCallback(() => {
+        resetLog();
+        setAtelier(null);
+        setActiveStudent(null);
+        setShowStudentSelect(false);
+        setShowMenu(false);
+        history.replaceState(null, "", window.location.pathname);
+    }, [resetLog]);
+
+    const handleCloseMenu = useCallback(() => setShowMenu(false), []);
+
+    // ── Écran de sélection d'atelier ────────────────────────────────────────────
+
     if (!atelier) {
         return (
             <div
@@ -121,21 +240,21 @@ export default function App() {
     }
 
     // ── Vue atelier ─────────────────────────────────────────────────────────────
+
     const m = ATELIERS[atelier];
     const hasSitDone = events.some((e) => e.type === "SIT_DONE");
 
     return (
         <div className="min-h-screen pt-14" style={{ background: "#F1EDE4" }}>
-            {/* Navbar contextuelle — porte le badge atelier, le 📊 et l'appui long */}
             <Navbar
                 atelierMeta={m}
+                activeStudent={activeStudent}
                 onLongPressStart={startHold}
                 onLongPressEnd={endHold}
                 onOpenDash={handleOpenDash}
                 hasSitDone={hasSitDone}
             />
 
-            {/* Contenu principal */}
             <main
                 style={{ maxWidth: "680px", margin: "0 auto", padding: "16px" }}
             >
@@ -152,17 +271,27 @@ export default function App() {
                 </p>
             </main>
 
+            {/* Sélection de l'élève — overlay z-40, sous la Navbar z-50 */}
+            {showStudentSelect && (
+                <StudentSelectScreen
+                    students={students}
+                    atelierMeta={m}
+                    onSelect={handleSelectStudent}
+                />
+            )}
+
             {/* Menu enseignant·e */}
             {showMenu && (
                 <TeacherMenu
                     onDash={handleOpenDash}
                     onChange={handleChangeAtel}
+                    onChangeStudent={handleChangeStudent}
                     onClose={handleCloseMenu}
                 />
             )}
 
-            {/* Dashboard */}
-            {showDash && (
+            {/* Dashboard — conditionné à startTs pour éviter un timer null */}
+            {showDash && startTs && (
                 <Dashboard
                     events={events}
                     atelierMeta={{ ...m, total: totalSits }}

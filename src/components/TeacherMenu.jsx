@@ -2,14 +2,12 @@
  * @file TeacherMenu — menu contextuel enseignant déclenché par appui long.
  *
  * @description
- * Panneau modal surgissant depuis le bas (bottom sheet) proposant deux actions
- * réservées à l'enseignant·e, accessibles via un appui long (≥ 2 s) sur le header.
- *
- * Ce mécanisme de déclenchement discret évite que les élèves n'accèdent
- * accidentellement aux fonctions de pilotage de la séance.
+ * Panneau modal surgissant depuis le bas (bottom sheet) proposant trois actions
+ * réservées à l'enseignant·e, accessibles via un appui long (≥ 2 s) sur la Navbar.
  *
  * Actions disponibles :
- * - **Tableau de bord** — ouvre le Dashboard de suivi en temps réel
+ * - **Tableau de bord**  — ouvre le Dashboard de suivi en temps réel
+ * - **Changer d'élève**  — réinitialise la session et rouvre StudentSelectScreen
  * - **Changer d'atelier** — réinitialise l'état et revient à SetupScreen
  *
  * ────────────────────────────────────────────────────────────────
@@ -17,26 +15,28 @@
  * ────────────────────────────────────────────────────────────────
  * - `role="dialog"` + `aria-modal="true"` sur le panneau
  * - `aria-label` sur chaque bouton d'action
- * - Fond semi-transparent cliquable pour fermer (équivalent "Annuler")
+ * - Fond semi-transparent cliquable pour fermer
+ *
+ * @module TeacherMenu
  */
 
 import PropTypes from "prop-types";
 
-// ─── Sous-composant : bouton d'action du menu ──────────────────────────────────
+// ─── Sous-composant : bouton d'action ──────────────────────────────────────────
 
 /**
  * Bouton d'action stylisé pour le menu enseignant.
  *
- * @param {Object}  props
- * @param {string}  props.icon       - Emoji de l'action
- * @param {string}  props.label      - Titre principal
- * @param {string}  props.sub        - Sous-titre descriptif
- * @param {string}  props.bg         - Couleur de fond (hex)
- * @param {string}  props.border     - Couleur de bordure (hex)
- * @param {string}  props.labelColor - Couleur du titre (classe Tailwind)
- * @param {string}  props.subColor   - Couleur du sous-titre (classe Tailwind)
- * @param {string}  props.hoverBg    - Classe Tailwind de survol
- * @param {Function} props.onClick   - Callback au clic
+ * @param {Object}   props
+ * @param {string}   props.icon       - Emoji de l'action
+ * @param {string}   props.label      - Titre principal
+ * @param {string}   props.sub        - Sous-titre descriptif
+ * @param {string}   props.bg         - Couleur de fond (hex)
+ * @param {string}   props.border     - Couleur de bordure (hex)
+ * @param {string}   props.labelColor - Classe Tailwind du titre
+ * @param {string}   props.subColor   - Classe Tailwind du sous-titre
+ * @param {string}   props.hoverBg    - Classe Tailwind de survol
+ * @param {Function} props.onClick    - Callback au clic
  *
  * @returns {JSX.Element}
  */
@@ -56,8 +56,8 @@ function MenuAction({
             onClick={onClick}
             aria-label={label}
             className={`flex items-center gap-3 p-4 rounded-2xl text-left
-                  font-bold text-slate-800 transition-colors touch-manipulation
-                  ${hoverBg}`}
+                        font-bold text-slate-800 transition-colors touch-manipulation
+                        ${hoverBg}`}
             style={{ background: bg, border: `2px solid ${border}` }}
         >
             <span
@@ -93,22 +93,26 @@ MenuAction.propTypes = {
  * Menu enseignant affiché en bottom sheet modal.
  *
  * @param {Object}   props
- * @param {Function} props.onDash   - Ouvre le tableau de bord
- * @param {Function} props.onChange - Revient à la sélection d'atelier
- * @param {Function} props.onClose  - Ferme le menu sans action
+ * @param {Function} props.onDash          - Ouvre le tableau de bord
+ * @param {Function} props.onChangeStudent - Réinitialise la session élève
+ * @param {Function} props.onChange        - Revient à la sélection d'atelier
+ * @param {Function} props.onClose         - Ferme le menu sans action
  *
  * @returns {JSX.Element}
  */
-export default function TeacherMenu({ onDash, onChange, onClose }) {
+export default function TeacherMenu({
+    onDash,
+    onChangeStudent,
+    onChange,
+    onClose,
+}) {
     return (
-        /* Fond semi-transparent — clic = fermeture */
         <div
             className="fixed inset-0 z-40 flex items-end justify-center p-4 no-print"
             style={{ background: "rgba(0,0,0,.5)" }}
             onClick={onClose}
             role="presentation"
         >
-            {/* Panneau — stoppe la propagation pour éviter la fermeture au clic interne */}
             <div
                 role="dialog"
                 aria-modal="true"
@@ -134,6 +138,19 @@ export default function TeacherMenu({ onDash, onChange, onClose }) {
                         onClick={onDash}
                     />
 
+                    {/* Action : Changer d'élève */}
+                    <MenuAction
+                        icon="👤"
+                        label="Changer d'élève"
+                        sub="Réinitialise la session, garde l'atelier"
+                        bg="#F0FDF4"
+                        border="#BBF7D0"
+                        labelColor="text-emerald-800"
+                        subColor="text-emerald-600"
+                        hoverBg="hover:bg-emerald-50"
+                        onClick={onChangeStudent}
+                    />
+
                     {/* Action : Changer d'atelier */}
                     <MenuAction
                         icon="🔄"
@@ -151,7 +168,7 @@ export default function TeacherMenu({ onDash, onChange, onClose }) {
                     <button
                         onClick={onClose}
                         className="py-3 rounded-2xl text-slate-400 font-bold text-sm
-                       hover:bg-slate-50 transition-colors touch-manipulation"
+                                   hover:bg-slate-50 transition-colors touch-manipulation"
                     >
                         Annuler
                     </button>
@@ -164,7 +181,9 @@ export default function TeacherMenu({ onDash, onChange, onClose }) {
 TeacherMenu.propTypes = {
     /** Ouvre le tableau de bord enseignant */
     onDash: PropTypes.func.isRequired,
-    /** Revient à l'écran de sélection d'atelier (réinitialisation) */
+    /** Réinitialise la session élève (garde l'atelier) */
+    onChangeStudent: PropTypes.func.isRequired,
+    /** Revient à l'écran de sélection d'atelier */
     onChange: PropTypes.func.isRequired,
     /** Ferme le menu sans déclencher d'action */
     onClose: PropTypes.func.isRequired,
