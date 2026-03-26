@@ -221,7 +221,13 @@ export default function App() {
                 style={{ background: "#F1EDE4" }}
             >
                 <Navbar />
-                <SetupScreen onSelect={selectAtelier} />
+                <SetupScreen
+                    students={students}
+                    addStudent={addStudent}
+                    removeStudent={removeStudent}
+                    traces={traces}
+                    onSelect={selectAtelier}
+                />
             </div>
         );
     }
@@ -273,6 +279,9 @@ export default function App() {
                     students={students}
                     atelierMeta={m}
                     onSelect={handleSelectStudent}
+                    addStudent={addStudent}
+                    removeStudent={removeStudent}
+                    traces={traces}
                 />
             )}
 
