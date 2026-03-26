@@ -297,7 +297,15 @@ export default function HelpModal({ onClose }) {
                                         outil propose une mise en œuvre
                                         numérique de la séance 6 de leur
                                         première séquence de découverte des
-                                        fractions au CE1.
+                                        fractions au CE1.{" "}
+                                        <a
+                                            href="https://digipad.app/p/1191415/9199dde61774f"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-blue-600 underline"
+                                        >
+                                            Consulter la séquence →
+                                        </a>
                                     </p>
                                     <p>
                                         <strong>Projet CAREC</strong> — Des
