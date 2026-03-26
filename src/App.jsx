@@ -1,37 +1,6 @@
 /**
  * @file App.jsx — composant racine de l'application Fractions CE1.
  *
- * @description
- * Orchestre les quatre couches de l'application :
- *
- * 1. **Sélection atelier** (`SetupScreen`)        — l'enseignant·e choisit l'atelier
- * 2. **Sélection élève**   (`StudentSelectScreen`) — l'élève s'identifie
- * 3. **Activité**          (AtelierTangram / AtelierDisques / AtelierCuisenaire)
- * 4. **Suivi**             (`Dashboard` à deux onglets + `TeacherMenu`)
- *
- * ────────────────────────────────────────────────────────────────
- * Contrôle d'accès au Dashboard
- * ────────────────────────────────────────────────────────────────
- * `dashTeacherMode` contrôle la visibilité de l'onglet "Suivi classe" :
- *
- * - false : ouverture via bouton 📊 Navbar → Session uniquement.
- *           Accessible à l'élève, aucune donnée sensible exposée.
- * - true  : ouverture via TeacherMenu (appui long 2s protégé)
- *           → Session + Classe (RosterManager, ClassTracker, resets).
- *
- * ────────────────────────────────────────────────────────────────
- * Fin d'atelier — passage de tablette
- * ────────────────────────────────────────────────────────────────
- * `handleChangeStudent` est passé comme `onDone` aux trois ateliers.
- * DoneScreen l'appelle via "Passer la tablette →".
- * Les ateliers sont remontés via clé dynamique incluant l'ID de l'élève.
- *
- * ────────────────────────────────────────────────────────────────
- * Persistance des traces — curseur incrémental
- * ────────────────────────────────────────────────────────────────
- * `processedCountRef` traite tous les nouveaux événements depuis le
- * dernier rendu (résout le batching React 18 de SIT_DONE + ATELIER_DONE).
- *
  * @module App
  */
 
@@ -62,13 +31,6 @@ function readUrlAtelier() {
     return VALID_ATELIERS.includes(p) ? p : null;
 }
 
-/**
- * Reconstruit un SituationSnapshot depuis le journal d'événements.
- *
- * @param {Array}  events
- * @param {Object} sitDoneData - Payload de SIT_DONE
- * @returns {import('./utils/tracesHelpers.js').SituationSnapshot}
- */
 function buildSnapshot(events, sitDoneData) {
     const {
         idx,
@@ -107,8 +69,6 @@ function buildSnapshot(events, sitDoneData) {
 // ─── Composant ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-    // ── Navigation ──────────────────────────────────────────────────────────────
-
     const urlAtelier = readUrlAtelier();
     const [atelier, setAtelier] = useState(urlAtelier);
     const [totalSits, setTotalSits] = useState(
@@ -118,19 +78,14 @@ export default function App() {
     const [showDash, setShowDash] = useState(false);
 
     /**
-     * false : accès élève via bouton 📊 — Session uniquement.
-     * true  : accès enseignant·e via TeacherMenu — Session + Classe.
+     * Contrôle l'accès à l'onglet Classe :
+     * false → bouton 📊 Navbar (élève) — Session uniquement
+     * true  → TeacherMenu (appui long) — Session + Classe
      */
     const [dashTeacherMode, setDashTeacherMode] = useState(false);
-
-    /** Onglet affiché à l'ouverture du Dashboard. */
     const [dashDefaultTab, setDashDefaultTab] = useState("session");
-
-    /** Élève actif — null = StudentSelectScreen affiché. */
     const [activeStudent, setActiveStudent] = useState(null);
     const [showStudentSelect, setShowStudentSelect] = useState(!!urlAtelier);
-
-    // ── Hooks ────────────────────────────────────────────────────────────────────
 
     const { events, log, resetLog } = useEventLog();
     const [startTs, setStartTs] = useState(null);
@@ -144,11 +99,11 @@ export default function App() {
         appendSituation,
         markCompleted,
         resetStudent,
-        resetAtelier,
+        resetStudentAll,
         resetAll,
     } = useStudentTraces();
 
-    // ── Persistance incrémentale ─────────────────────────────────────────────────
+    // ── Persistance incrémentale (curseur anti-batching React 18) ──────────────
 
     useEffect(() => {
         if (events.length === 0) {
@@ -156,23 +111,21 @@ export default function App() {
             return;
         }
         if (!activeStudent || !atelier) return;
-
         const newEvents = events.slice(processedCountRef.current);
         newEvents.forEach((event) => {
-            if (event.type === "SIT_DONE") {
+            if (event.type === "SIT_DONE")
                 appendSituation(
                     atelier,
                     activeStudent.id,
                     buildSnapshot(events, event.data)
                 );
-            } else if (event.type === "ATELIER_DONE") {
+            else if (event.type === "ATELIER_DONE")
                 markCompleted(atelier, activeStudent.id);
-            }
         });
         processedCountRef.current = events.length;
     }, [events, activeStudent, atelier, appendSituation, markCompleted]);
 
-    // ── Sélection de l'atelier ───────────────────────────────────────────────────
+    // ── Sélection atelier ────────────────────────────────────────────────────────
 
     const selectAtelier = useCallback(
         (id, total) => {
@@ -186,7 +139,7 @@ export default function App() {
         [resetLog]
     );
 
-    // ── Sélection / changement d'élève ───────────────────────────────────────────
+    // ── Sélection / changement élève ─────────────────────────────────────────────
 
     const handleSelectStudent = useCallback(
         (student) => {
@@ -199,12 +152,6 @@ export default function App() {
         [atelier, openSession, resetLog]
     );
 
-    /**
-     * Réinitialise la session élève sans changer d'atelier.
-     * Appelé depuis :
-     * - TeacherMenu → "Changer d'élève"
-     * - DoneScreen  → "Passer la tablette →" (via onDone)
-     */
     const handleChangeStudent = useCallback(() => {
         setActiveStudent(null);
         setShowStudentSelect(true);
@@ -213,11 +160,9 @@ export default function App() {
         resetLog();
     }, [resetLog]);
 
-    // ── Accès au Dashboard ───────────────────────────────────────────────────────
+    // ── Ouverture Dashboard ──────────────────────────────────────────────────────
 
-    /**
-     * Ouverture élève (bouton 📊 Navbar) — Session uniquement, pas de données sensibles.
-     */
+    /** Élève — Session uniquement */
     const handleOpenDash = useCallback(() => {
         setDashTeacherMode(false);
         setDashDefaultTab("session");
@@ -225,10 +170,7 @@ export default function App() {
         setShowMenu(false);
     }, []);
 
-    /**
-     * Ouverture enseignant·e via TeacherMenu → "Tableau de bord".
-     * Session + Classe visibles.
-     */
+    /** Enseignant·e — Tableau de bord (session en premier) */
     const handleOpenDashTeacher = useCallback(() => {
         setDashTeacherMode(true);
         setDashDefaultTab("session");
@@ -236,10 +178,7 @@ export default function App() {
         setShowMenu(false);
     }, []);
 
-    /**
-     * Ouverture enseignant·e via TeacherMenu → "Gérer les élèves".
-     * Ouvre directement sur l'onglet Classe.
-     */
+    /** Enseignant·e — Gérer les élèves (onglet Classe direct) */
     const handleManageRoster = useCallback(() => {
         setDashTeacherMode(true);
         setDashDefaultTab("classe");
@@ -258,7 +197,6 @@ export default function App() {
     const startHold = useCallback(() => {
         holdRef.current = setTimeout(() => setShowMenu(true), LONG_PRESS_DELAY);
     }, []);
-
     const endHold = useCallback(() => clearTimeout(holdRef.current), []);
 
     // ── Autres handlers TeacherMenu ──────────────────────────────────────────────
@@ -274,7 +212,7 @@ export default function App() {
 
     const handleCloseMenu = useCallback(() => setShowMenu(false), []);
 
-    // ── Écran de sélection d'atelier ────────────────────────────────────────────
+    // ── Écran sélection atelier ──────────────────────────────────────────────────
 
     if (!atelier) {
         return (
@@ -287,8 +225,6 @@ export default function App() {
             </div>
         );
     }
-
-    // ── Vue atelier ─────────────────────────────────────────────────────────────
 
     const m = ATELIERS[atelier];
     const hasSitDone = events.some((e) => e.type === "SIT_DONE");
@@ -336,7 +272,6 @@ export default function App() {
                 </p>
             </main>
 
-            {/* Sélection de l'élève — z-40, sous Navbar z-50 */}
             {showStudentSelect && (
                 <StudentSelectScreen
                     students={students}
@@ -345,7 +280,6 @@ export default function App() {
                 />
             )}
 
-            {/* Menu enseignant·e — seul point d'accès aux fonctions protégées */}
             {showMenu && (
                 <TeacherMenu
                     onDash={handleOpenDashTeacher}
@@ -356,7 +290,6 @@ export default function App() {
                 />
             )}
 
-            {/* Dashboard — teacherMode contrôle la visibilité de l'onglet Classe */}
             {showDash && (
                 <Dashboard
                     events={events}
@@ -371,7 +304,7 @@ export default function App() {
                     addStudent={addStudent}
                     removeStudent={removeStudent}
                     resetStudent={resetStudent}
-                    resetAtelier={resetAtelier}
+                    resetStudentAll={resetStudentAll}
                     resetAll={resetAll}
                 />
             )}

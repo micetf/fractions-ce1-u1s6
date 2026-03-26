@@ -2,23 +2,13 @@
  * @file Dashboard.jsx — tableau de bord enseignant à deux onglets.
  *
  * @description
- * Orchestrateur étendu avec un système d'onglets et un contrôle d'accès.
+ * ── Onglet "📊 Session" ──────────────────────────────────────────────
+ * Visible à tous (bouton Navbar). Métriques temps réel, frise,
+ * tableau détaillé, distracteurs, situation en cours.
  *
- * ── Onglet "📊 Session" ────────────────────────────────────────
- * Toujours visible. Accessible à tous (bouton Navbar).
- * Contenu : métriques, frise, tableau détaillé, distracteurs,
- * situation en cours.
- *
- * ── Onglet "👥 Classe" ─────────────────────────────────────────
- * Visible uniquement si `teacherMode === true`.
- * Accessible via TeacherMenu uniquement (protégé par appui long).
- * Contenu : RosterManager (CRUD élèves) + ClassTracker (suivi + resets).
- *
- * ────────────────────────────────────────────────────────────────
- * Prop teacherMode
- * ────────────────────────────────────────────────────────────────
- * false (défaut) : ouverture via bouton 📊 Navbar — Session uniquement.
- * true           : ouverture via TeacherMenu — les deux onglets visibles.
+ * ── Onglet "👥 Classe" ──────────────────────────────────────────────
+ * Visible uniquement si `teacherMode === true` (TeacherMenu, appui long).
+ * RosterManager + ClassTracker avec navigation liste/détail élève.
  *
  * @module Dashboard
  */
@@ -36,11 +26,8 @@ import RosterManager from "./RosterManager.jsx";
 import ClassTracker from "./ClassTracker.jsx";
 import { useSituationStats } from "../../hooks/useSituationStats";
 
-// ─── Sous-composant : bouton d'onglet ──────────────────────────────────────────
+// ─── Sous-composant onglet ──────────────────────────────────────────────────────
 
-/**
- * @param {{ label:string, active:boolean, onClick:Function }} props
- */
 function Tab({ label, active, onClick }) {
     return (
         <button
@@ -65,23 +52,6 @@ Tab.propTypes = {
 
 // ─── Composant principal ────────────────────────────────────────────────────────
 
-/**
- * @param {Object}      props
- * @param {Array}       props.events        - Journal complet des événements
- * @param {Object}      props.atelierMeta   - Métadonnées de l'atelier
- * @param {number|null} props.startTs       - Timestamp début de séance (null avant 1ère session)
- * @param {string}      [props.defaultTab]  - Onglet affiché à l'ouverture
- * @param {boolean}     [props.teacherMode] - true = onglet Classe visible
- * @param {Function}    props.onClose
- * @param {Array}       props.students
- * @param {Object}      props.traces
- * @param {string}      props.atelierID
- * @param {Function}    props.addStudent
- * @param {Function}    props.removeStudent
- * @param {Function}    props.resetStudent
- * @param {Function}    props.resetAtelier
- * @param {Function}    props.resetAll
- */
 export default function Dashboard({
     events,
     atelierMeta,
@@ -95,13 +65,12 @@ export default function Dashboard({
     addStudent,
     removeStudent,
     resetStudent,
-    resetAtelier,
+    resetStudentAll,
     resetAll,
 }) {
     const [tab, setTab] = useState(defaultTab);
     const { sits, done, current, allDistractors, firstTryPct, avgDur } =
         useSituationStats(events);
-
     const hasSession = startTs !== null;
 
     return (
@@ -145,7 +114,7 @@ export default function Dashboard({
                             )}
                             <button
                                 onClick={onClose}
-                                aria-label="Fermer le tableau de bord"
+                                aria-label="Fermer"
                                 className="text-white font-bold text-lg py-1 px-4 rounded-xl
                                            hover:bg-white/20 transition-colors"
                                 style={{ background: "rgba(255,255,255,.15)" }}
@@ -155,7 +124,7 @@ export default function Dashboard({
                         </div>
                     </div>
 
-                    {/* ── Sélecteur d'onglets — Classe visible en mode enseignant uniquement ── */}
+                    {/* ── Onglets — Classe visible en teacherMode uniquement ── */}
                     {teacherMode && (
                         <div className="flex gap-1 mb-4 no-print border-b border-white/10 pb-1">
                             {hasSession && (
@@ -178,7 +147,6 @@ export default function Dashboard({
                         <>
                             {hasSession ? (
                                 <>
-                                    {/* Métriques synthèse */}
                                     <div className="grid grid-cols-3 gap-2 mb-4">
                                         <MetricCard
                                             icon="🕐"
@@ -211,19 +179,14 @@ export default function Dashboard({
                                             color="#F9A8D4"
                                         />
                                     </div>
-
                                     <ProgressionFrise
                                         sits={sits}
                                         total={atelierMeta.total}
                                     />
                                     <SituationsTable done={done} />
-
                                     {allDistractors.length > 0 && (
                                         <div className="bg-white rounded-2xl p-4 mb-3">
-                                            <p
-                                                className="text-slate-600 text-xs font-bold
-                                                          uppercase tracking-widest mb-2"
-                                            >
+                                            <p className="text-slate-600 text-xs font-bold uppercase tracking-widest mb-2">
                                                 Erreurs repérées — distracteurs
                                             </p>
                                             <div className="flex flex-wrap gap-2">
@@ -238,13 +201,9 @@ export default function Dashboard({
                                             </div>
                                         </div>
                                     )}
-
                                     {current && (
                                         <div className="bg-white/10 rounded-2xl p-4 mb-3">
-                                            <p
-                                                className="text-white/70 text-xs font-bold
-                                                          uppercase tracking-widest mb-1"
-                                            >
+                                            <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-1">
                                                 Situation en cours
                                             </p>
                                             <p className="text-white font-bold">
@@ -270,7 +229,6 @@ export default function Dashboard({
                                             )}
                                         </div>
                                     )}
-
                                     <div
                                         className="rounded-2xl p-3"
                                         style={{
@@ -284,7 +242,6 @@ export default function Dashboard({
                                     </div>
                                 </>
                             ) : (
-                                /* Aucune session démarrée — message informatif */
                                 <div
                                     className="rounded-2xl p-8 text-center"
                                     style={{
@@ -303,7 +260,7 @@ export default function Dashboard({
                         </>
                     )}
 
-                    {/* ════ ONGLET CLASSE — enseignant·e uniquement ════ */}
+                    {/* ════ ONGLET CLASSE ════ */}
                     {teacherMode && tab === "classe" && (
                         <>
                             <RosterManager
@@ -318,7 +275,7 @@ export default function Dashboard({
                                 atelierID={atelierID}
                                 atelierMeta={atelierMeta}
                                 resetStudent={resetStudent}
-                                resetAtelier={resetAtelier}
+                                resetStudentAll={resetStudentAll}
                                 resetAll={resetAll}
                             />
                         </>
@@ -330,13 +287,7 @@ export default function Dashboard({
 }
 
 Dashboard.propTypes = {
-    events: PropTypes.arrayOf(
-        PropTypes.shape({
-            type: PropTypes.string.isRequired,
-            data: PropTypes.object.isRequired,
-            t: PropTypes.number.isRequired,
-        })
-    ).isRequired,
+    events: PropTypes.array.isRequired,
     atelierMeta: PropTypes.shape({
         icon: PropTypes.string.isRequired,
         label: PropTypes.string.isRequired,
@@ -345,7 +296,6 @@ Dashboard.propTypes = {
     }).isRequired,
     startTs: PropTypes.number,
     defaultTab: PropTypes.oneOf(["session", "classe"]),
-    /** false = Session uniquement (élève) · true = Session + Classe (enseignant·e) */
     teacherMode: PropTypes.bool,
     onClose: PropTypes.func.isRequired,
     students: PropTypes.array.isRequired,
@@ -354,7 +304,7 @@ Dashboard.propTypes = {
     addStudent: PropTypes.func.isRequired,
     removeStudent: PropTypes.func.isRequired,
     resetStudent: PropTypes.func.isRequired,
-    resetAtelier: PropTypes.func.isRequired,
+    resetStudentAll: PropTypes.func.isRequired,
     resetAll: PropTypes.func.isRequired,
 };
 

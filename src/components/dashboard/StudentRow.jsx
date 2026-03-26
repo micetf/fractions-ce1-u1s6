@@ -1,40 +1,24 @@
 /**
- * @file StudentRow.jsx — ligne de suivi d'un élève dans ClassTracker.
+ * @file StudentRow.jsx — ligne cliquable dans ClassTracker.
  *
  * @description
- * Composant de présentation pur : affiche la progression synthétique
- * d'un élève pour l'atelier courant, à partir de sa session persistée.
- *
- * Indicateurs affichés :
- * - Pseudo de l'élève
- * - Avancement : n situations faites / total (avec points colorés)
- * - Badge ✓ si la session est terminée (ATELIER_DONE reçu)
- * - Date d'ouverture de session (jj/mm)
- * - Bouton de réinitialisation individuelle
- *
- * Codage couleur des points (cohérent avec SituationDot) :
- * - Vert  (#10B981) → perfect
- * - Ambre (#F59E0B) → good
- * - Orange (#F97316) → struggled
+ * Affiche la progression synthétique d'un élève et ouvre `StudentDetail`
+ * au clic. Les actions de réinitialisation ont été déplacées dans
+ * `StudentDetail` pour plus de contextualité et moins de risque accidentel.
  *
  * @module StudentRow
  */
 
 import PropTypes from "prop-types";
 
-/** Couleur par statut de situation (cohérent avec SituationDot). */
+/** Couleur par statut (cohérent avec SituationDot). */
 const STATUS_COLOR = {
     perfect: "#10B981",
     good: "#F59E0B",
     struggled: "#F97316",
 };
 
-/**
- * Formate une date ISO en "jj/mm".
- *
- * @param {string} iso - Date ISO 8601
- * @returns {string}
- */
+/** Formate une date ISO en "jj/mm". */
 const fmtDate = (iso) =>
     new Date(iso).toLocaleDateString("fr-FR", {
         day: "2-digit",
@@ -44,24 +28,21 @@ const fmtDate = (iso) =>
 // ─── Composant ─────────────────────────────────────────────────────────────────
 
 /**
- * Ligne de suivi élève dans le tableau ClassTracker.
- *
  * @param {Object}       props
  * @param {string}       props.pseudo   - Pseudo de l'élève
  * @param {Object|null}  props.session  - Session persistée (null = pas commencé)
- * @param {number}       props.total    - Nombre total de situations de l'atelier
- * @param {Function}     props.onReset  - Ouvre la modale de confirmation de reset
- *
- * @returns {JSX.Element}
+ * @param {number}       props.total    - Nombre total de situations
+ * @param {Function}     props.onSelect - Ouvre StudentDetail pour cet élève
  */
-export default function StudentRow({ pseudo, session, total, onReset }) {
+export default function StudentRow({ pseudo, session, total, onSelect }) {
     const hasSessions = session !== null;
     const done = hasSessions ? session.situations.length : 0;
 
     return (
-        <div
-            className="flex items-center gap-3 py-2.5 px-3 rounded-xl
-                        bg-white/8 hover:bg-white/12 transition-colors"
+        <button
+            onClick={onSelect}
+            className="w-full flex items-center gap-3 py-2.5 px-3 rounded-xl
+                       text-left hover:bg-white/10 transition-colors touch-manipulation"
         >
             {/* Pseudo */}
             <span
@@ -84,7 +65,6 @@ export default function StudentRow({ pseudo, session, total, onReset }) {
                             title={s.label}
                         />
                     ))}
-                    {/* Points gris pour les situations non atteintes */}
                     {Array.from({ length: Math.max(0, total - done) }).map(
                         (_, i) => (
                             <span
@@ -100,13 +80,11 @@ export default function StudentRow({ pseudo, session, total, onReset }) {
                 </span>
             )}
 
-            {/* Compteur + badge terminé */}
+            {/* Avancement ou badge terminé */}
             {hasSessions && (
-                <span className="text-white/60 text-xs font-bold shrink-0 w-10 text-right">
+                <span className="text-white/60 text-xs font-bold shrink-0 w-12 text-right">
                     {session.completed ? (
-                        <span className="text-emerald-400 font-bold">
-                            ✓ fin
-                        </span>
+                        <span className="text-emerald-400">✓ fin</span>
                     ) : (
                         `${done}/${total}`
                     )}
@@ -115,25 +93,14 @@ export default function StudentRow({ pseudo, session, total, onReset }) {
 
             {/* Date */}
             {hasSessions && (
-                <span className="text-white/40 text-xs shrink-0 w-10 text-right">
+                <span className="text-white/30 text-xs shrink-0 w-10 text-right">
                     {fmtDate(session.openedAt)}
                 </span>
             )}
 
-            {/* Bouton reset individuel */}
-            <button
-                onClick={onReset}
-                disabled={!hasSessions}
-                className="shrink-0 p-1.5 rounded-lg text-white/30
-                           hover:text-red-400 hover:bg-red-900/30
-                           disabled:opacity-20 disabled:cursor-not-allowed
-                           transition-colors touch-manipulation"
-                title={`Réinitialiser ${pseudo}`}
-                aria-label={`Réinitialiser la progression de ${pseudo}`}
-            >
-                🗑
-            </button>
-        </div>
+            {/* Chevron */}
+            <span className="text-white/25 font-bold shrink-0">›</span>
+        </button>
     );
 }
 
@@ -142,17 +109,10 @@ StudentRow.propTypes = {
     session: PropTypes.shape({
         openedAt: PropTypes.string.isRequired,
         completed: PropTypes.bool.isRequired,
-        situations: PropTypes.arrayOf(
-            PropTypes.shape({
-                status: PropTypes.string.isRequired,
-                label: PropTypes.string.isRequired,
-            })
-        ).isRequired,
+        situations: PropTypes.array.isRequired,
     }),
     total: PropTypes.number.isRequired,
-    onReset: PropTypes.func.isRequired,
+    onSelect: PropTypes.func.isRequired,
 };
 
-StudentRow.defaultProps = {
-    session: null,
-};
+StudentRow.defaultProps = { session: null };

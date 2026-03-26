@@ -3,11 +3,12 @@
  *
  * @description
  * Couche React mince sur `tracesHelpers`. Maintient le store en état React
- * (pour déclencher les re-rendus) et le persiste en localStorage de façon
- * synchrone à chaque mutation.
+ * et le persiste en localStorage à chaque mutation (pattern commit).
  *
- * Toutes les fonctions exposées effectuent un pattern
- * lecture-avant-écriture pour la sécurité multi-onglets.
+ * API de réinitialisation :
+ * - resetStudent(atelierID, studentId) — élève / atelier courant
+ * - resetStudentAll(studentId)         — élève / tous les ateliers
+ * - resetAll()                         — tout supprimer
  *
  * @module useStudentTraces
  */
@@ -21,11 +22,9 @@ import {
     appendSituation as _appendSituation,
     markCompleted as _markCompleted,
     deleteSession as _deleteSession,
-    deleteAtelier as _deleteAtelier,
+    deleteStudentAllAteliers as _deleteStudentAllAteliers,
 } from "../utils/tracesHelpers.js";
 import { removeStorage, STORAGE_KEYS } from "../utils/storage.js";
-
-// ─── Typedef ───────────────────────────────────────────────────────────────────
 
 /**
  * @typedef {import('../utils/tracesHelpers.js').Session}           Session
@@ -33,48 +32,16 @@ import { removeStorage, STORAGE_KEYS } from "../utils/storage.js";
  * @typedef {import('../utils/tracesHelpers.js').TracesStore}       TracesStore
  */
 
-/**
- * @typedef {Object} UseStudentTracesReturn
- * @property {TracesStore} traces
- * @property {Function} openSession      (atelierID, studentId) → void
- * @property {Function} appendSituation  (atelierID, studentId, snap) → void
- * @property {Function} markCompleted    (atelierID, studentId) → void
- * @property {Function} getSession       (atelierID, studentId) → Session|null
- * @property {Function} resetStudent     (atelierID, studentId) → void
- * @property {Function} resetAtelier     (atelierID) → void
- * @property {Function} resetAll         () → void
- */
-
-// ─── Hook ──────────────────────────────────────────────────────────────────────
-
-/**
- * Gestion des traces de parcours élèves persistées dans localStorage.
- *
- * @returns {UseStudentTracesReturn}
- *
- * @example
- * const { openSession, appendSituation, getSession } = useStudentTraces();
- *
- * // Ouverture de session à la sélection de l'élève
- * openSession('tg', student.id);
- *
- * // Persistance incrémentale sur SIT_DONE
- * appendSituation('tg', student.id, situationSnapshot);
- *
- * // Lecture dans le Dashboard
- * const session = getSession('tg', student.id);
- */
 export function useStudentTraces() {
     const [traces, setTraces] = useState(() => readTraces());
 
     /**
-     * Applique une transformation pure sur le store,
-     * persiste et met à jour l'état React.
+     * Pattern lecture-avant-écriture : relit localStorage pour merger
+     * en cas de multi-onglets, applique la transformation, persiste.
      *
      * @param {function(TracesStore): TracesStore} transform
      */
     const commit = useCallback((transform) => {
-        // Relecture pour merger en cas de multi-onglets
         const fresh = readTraces();
         const next = transform(fresh);
         writeTraces(next);
@@ -99,23 +66,25 @@ export function useStudentTraces() {
         [commit]
     );
 
-    /** Lecture directe depuis l'état React (pas de relecture localStorage). */
     const getSession = useCallback(
         (atelierID, studentId) => _getSession(traces, atelierID, studentId),
         [traces]
     );
 
+    /** Réinitialise un élève sur l'atelier courant uniquement. */
     const resetStudent = useCallback(
         (atelierID, studentId) =>
             commit((t) => _deleteSession(t, atelierID, studentId)),
         [commit]
     );
 
-    const resetAtelier = useCallback(
-        (atelierID) => commit((t) => _deleteAtelier(t, atelierID)),
+    /** Réinitialise un élève sur tous les ateliers. */
+    const resetStudentAll = useCallback(
+        (studentId) => commit((t) => _deleteStudentAllAteliers(t, studentId)),
         [commit]
     );
 
+    /** Supprime toutes les traces de tous les élèves. */
     const resetAll = useCallback(() => {
         removeStorage(STORAGE_KEYS.TRACES);
         setTraces({});
@@ -128,7 +97,7 @@ export function useStudentTraces() {
         markCompleted,
         getSession,
         resetStudent,
-        resetAtelier,
+        resetStudentAll,
         resetAll,
     };
 }

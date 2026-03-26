@@ -3,8 +3,7 @@
  *
  * @description
  * Toutes les opérations de lecture/écriture sur la structure `TracesStore`
- * sans aucune dépendance React. Permet de tester la logique indépendamment
- * du cycle de vie des composants.
+ * sans aucune dépendance React.
  *
  * Structure persistée sous `fce1u1s6_traces` :
  * ```
@@ -15,9 +14,6 @@
  * }
  * ```
  *
- * Une seule session est conservée par élève par atelier (la plus récente).
- * Les sessions partielles (sans ATELIER_DONE) sont incluses.
- *
  * @module tracesHelpers
  */
 
@@ -26,9 +22,6 @@ import { STORAGE_KEYS, readStorage, writeStorage } from "./storage.js";
 // ─── Typedefs ──────────────────────────────────────────────────────────────────
 
 /**
- * Instantané d'une situation terminée ou en cours.
- * Correspond au sous-ensemble de SituationStats persistable.
- *
  * @typedef {Object} SituationSnapshot
  * @property {number}                   idx
  * @property {string}                   id
@@ -43,62 +36,37 @@ import { STORAGE_KEYS, readStorage, writeStorage } from "./storage.js";
  */
 
 /**
- * Session de parcours d'un élève sur un atelier.
- *
  * @typedef {Object} Session
- * @property {string}               sessionId  - UUID v4
+ * @property {string}               sessionId
  * @property {string}               openedAt   - ISO 8601
- * @property {boolean}              completed  - true après ATELIER_DONE
- * @property {SituationSnapshot[]}  situations - situations triées par idx
+ * @property {boolean}              completed
+ * @property {SituationSnapshot[]}  situations
  */
 
-/**
- * Structure complète du store de traces.
- *
- * @typedef {Object.<string, Object.<string, Session>>} TracesStore
- */
+/** @typedef {Object.<string, Object.<string, Session>>} TracesStore */
 
 // ─── Lecture / Écriture ────────────────────────────────────────────────────────
 
-/**
- * Lit le store complet depuis localStorage.
- *
- * @returns {TracesStore}
- */
+/** @returns {TracesStore} */
 export const readTraces = () => readStorage(STORAGE_KEYS.TRACES, {});
 
-/**
- * Persiste le store complet dans localStorage.
- *
- * @param {TracesStore} traces
- * @returns {boolean}
- */
+/** @param {TracesStore} traces @returns {boolean} */
 export const writeTraces = (traces) =>
     writeStorage(STORAGE_KEYS.TRACES, traces);
 
 // ─── Accès ciblé ───────────────────────────────────────────────────────────────
 
 /**
- * Retourne la session d'un élève pour un atelier donné.
- *
  * @param {TracesStore} traces
- * @param {string}      atelierID
- * @param {string}      studentId
+ * @param {string} atelierID
+ * @param {string} studentId
  * @returns {Session|null}
  */
 export const getSession = (traces, atelierID, studentId) =>
     traces?.[atelierID]?.[studentId] ?? null;
 
-// ─── Mutations (retournent un nouveau store — immutabilité) ────────────────────
+// ─── Mutations immutables ──────────────────────────────────────────────────────
 
-/**
- * Crée ou remplace la session d'un élève (ouverture d'atelier).
- *
- * @param {TracesStore} traces
- * @param {string}      atelierID
- * @param {string}      studentId
- * @returns {TracesStore}
- */
 export const openSession = (traces, atelierID, studentId) => ({
     ...traces,
     [atelierID]: {
@@ -112,23 +80,11 @@ export const openSession = (traces, atelierID, studentId) => ({
     },
 });
 
-/**
- * Insère ou met à jour une situation dans la session active (upsert par idx).
- * Sans effet si aucune session n'est ouverte pour cet élève.
- *
- * @param {TracesStore}      traces
- * @param {string}           atelierID
- * @param {string}           studentId
- * @param {SituationSnapshot} snap
- * @returns {TracesStore}
- */
 export const appendSituation = (traces, atelierID, studentId, snap) => {
     const session = getSession(traces, atelierID, studentId);
     if (!session) return traces;
-
     const existing = session.situations.filter((s) => s.idx !== snap.idx);
     const updated = [...existing, snap].sort((a, b) => a.idx - b.idx);
-
     return {
         ...traces,
         [atelierID]: {
@@ -138,14 +94,6 @@ export const appendSituation = (traces, atelierID, studentId, snap) => {
     };
 };
 
-/**
- * Marque une session comme terminée (après ATELIER_DONE).
- *
- * @param {TracesStore} traces
- * @param {string}      atelierID
- * @param {string}      studentId
- * @returns {TracesStore}
- */
 export const markCompleted = (traces, atelierID, studentId) => {
     const session = getSession(traces, atelierID, studentId);
     if (!session) return traces;
@@ -159,12 +107,7 @@ export const markCompleted = (traces, atelierID, studentId) => {
 };
 
 /**
- * Supprime la session d'un élève pour un atelier.
- *
- * @param {TracesStore} traces
- * @param {string}      atelierID
- * @param {string}      studentId
- * @returns {TracesStore}
+ * Supprime la session d'un élève pour un atelier donné.
  */
 export const deleteSession = (traces, atelierID, studentId) => {
     const atelier = { ...traces[atelierID] };
@@ -173,11 +116,24 @@ export const deleteSession = (traces, atelierID, studentId) => {
 };
 
 /**
- * Supprime toutes les sessions d'un atelier (reset atelier).
+ * Supprime toutes les sessions d'un élève sur TOUS les ateliers.
+ * Cas d'usage : reset complet d'un élève (départ, erreur de manipulation).
  *
  * @param {TracesStore} traces
- * @param {string}      atelierID
+ * @param {string}      studentId
  * @returns {TracesStore}
+ */
+export const deleteStudentAllAteliers = (traces, studentId) =>
+    Object.fromEntries(
+        Object.entries(traces).map(([atelierID, atelierData]) => {
+            const copy = { ...atelierData };
+            delete copy[studentId];
+            return [atelierID, copy];
+        })
+    );
+
+/**
+ * Supprime toutes les sessions de tous les élèves sur un atelier.
  */
 export const deleteAtelier = (traces, atelierID) => {
     const next = { ...traces };
