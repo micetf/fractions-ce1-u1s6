@@ -112,16 +112,31 @@ export const TG = [
     },
     {
         id: "tg5",
-        label: "Grand triangle ⑤",
-        pieceLabel: "grand triangle",
-        color: "#7C3AED",
-        ghostC: "#DDD6FE",
-        active: "190,10 190,190 10,190",
-        ghosts: ["10,10 190,10 10,190"],
+        label: "Rectangle ⑤",
+        pieceLabel: "rectangle",
+        color: "#0891B2", // cyan-600 — distinct des 4 autres situations
+        ghostC: "#A5F3FC", // cyan-200
+        //
+        // Carré plié en deux horizontalement :
+        //   moitié haute (active) : rectangle 180×90 en haut du carré
+        //   moitié basse (ghost)  : rectangle 180×90 en bas
+        //
+        active: "10,10 190,10 190,100 10,100",
+        ghosts: ["10,100 190,100 190,190 10,190"],
         n: 2,
         answer: "un demi",
         tout: "carré",
-        fOpts: ["un demi", "un quart", "un huitième", "un tiers"],
-        rot: 18, // coin bas-droit → rotation différente de tg1
+        //
+        // Distracteurs : un tiers et un quart sont les confusions les plus
+        // fréquentes à CE1 sur un rectangle (l'élève peut penser "3 bandes"
+        // ou confondre avec le quart vu en tg2/tg4).
+        //
+        fOpts: ["un demi", "un tiers", "un quart", "un huitième"],
+        //
+        // Rotation du modèle affiché : on incline le rectangle pour éviter
+        // l'orientation "bande horizontale" prototypique qui induirait l'élève
+        // à compter des lignes plutôt qu'une surface.
+        //
+        rot: 25,
     },
 ];
