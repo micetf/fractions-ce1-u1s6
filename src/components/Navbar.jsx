@@ -1,39 +1,31 @@
 /**
- * @file Navbar.jsx — barre de navigation MiCetF, contextuelle selon la vue active.
+ * @file Navbar.jsx — barre de navigation contextuelle selon le mode.
  *
  * @description
- * Barre fixe `h-14` (56 px), `z-50`, seule barre présente dans toute
- * l'application. Elle délègue le rendu à deux sous-composants :
+ * Trois comportements selon `mode` :
  *
- * - **NavCenter** — zone centrale (titre fixe ou zone d'appui long + badges)
- * - **NavActions** — zone droite (Dashboard, Aide, PayPal*, Email*)
- *                    * PayPal et Email masqués en mode atelier
+ * ── Mode `visitor` ──────────────────────────────────────────────────
+ *   Gauche : lien MiCetF
+ *   Centre : titre « Fractions CE1 »
+ *   Droite : Aide + PayPal + Email
  *
- * ────────────────────────────────────────────────────────────────
- * Trois modes
- * ────────────────────────────────────────────────────────────────
- * **Mode sélection** (`atelierMeta` absent) :
- *   Gauche : lien MiCetF  |  Centre : titre fixe  |  Droite : Aide + PayPal + Email
+ * ── Mode `teacher` ──────────────────────────────────────────────────
+ *   Gauche : bouton ← retour (onBack)
+ *   Centre : titre + badge atelier si atelierMeta fourni
+ *   Droite : Aide uniquement
  *
- * **Mode atelier sans élève** (`atelierMeta` présent, `activeStudent` null) :
- *   Centre : zone d'appui long — titre + badge atelier
- *   Droite : Dashboard + Aide
- *
- * **Mode atelier avec élève** (`atelierMeta` + `activeStudent` présents) :
- *   Centre : titre + badge atelier + badge 👤 prénom
- *   Droite : Dashboard + Aide
- *
- * ────────────────────────────────────────────────────────────────
- * Appui long
- * ────────────────────────────────────────────────────────────────
- * En mode atelier, la zone centrale déclenche le TeacherMenu après
- * 2 s via `onLongPressStart` / `onLongPressEnd` (gérés dans App.jsx).
+ * ── Mode `student` ──────────────────────────────────────────────────
+ *   Gauche : MiCetF (lien externe neutre)
+ *   Centre : zone d'appui long — titre + badge atelier + badge élève
+ *   Droite : bouton 📊 (résultats propres) + Aide
+ *   Pas de PayPal, pas de gestion classe
  *
  * @module Navbar
  */
 
 import { useState } from "react";
 import PropTypes from "prop-types";
+import HelpModal from "./ui/HelpModal.jsx";
 import NavCenter from "./navbar/NavCenter.jsx";
 import NavActions from "./navbar/NavActions.jsx";
 
@@ -42,137 +34,130 @@ import NavActions from "./navbar/NavActions.jsx";
 /**
  * Barre de navigation MiCetF — fixe, z-50, h-14 (56 px).
  *
- * @param {Object|null}   [props.atelierMeta]           - Métadonnées de l'atelier actif
- * @param {string}         props.atelierMeta.icon        - Emoji de l'atelier
- * @param {string}         props.atelierMeta.label       - Nom de l'atelier
- * @param {string}         props.atelierMeta.color       - Couleur thématique (hex)
- * @param {string}         props.atelierMeta.light       - Couleur de fond claire (hex)
- * @param {string}         props.atelierMeta.border      - Couleur de bordure (hex)
- * @param {string}         props.atelierMeta.sub         - Sous-titre de l'atelier
- * @param {Object|null}   [props.activeStudent]          - Élève actif (null = sélection en cours)
- * @param {string}         props.activeStudent.pseudo    - Pseudo affiché
- * @param {Function|null} [props.onLongPressStart]       - Début d'appui long
- * @param {Function|null} [props.onLongPressEnd]         - Fin / annulation d'appui long
- * @param {Function|null} [props.onOpenDash]             - Ouvre le Dashboard
- * @param {boolean}       [props.hasSitDone]             - Point vert sur le bouton 📊
+ * @param {'visitor'|'teacher'|'student'} [props.mode='visitor']
+ * @param {Object|null}   [props.atelierMeta]       - Métadonnées atelier
+ * @param {Object|null}   [props.activeStudent]     - Élève actif (mode student)
+ * @param {Function|null} [props.onBack]            - Retour (mode teacher)
+ * @param {Function|null} [props.onLongPressStart]  - Appui long début (mode student)
+ * @param {Function|null} [props.onLongPressEnd]    - Appui long fin  (mode student)
+ * @param {Function|null} [props.onOpenDash]        - Ouvre Dashboard élève (mode student)
+ * @param {boolean}       [props.hasSitDone]        - Point vert sur 📊
  * @returns {JSX.Element}
  */
 export default function Navbar({
+    mode = "visitor",
     atelierMeta = null,
     activeStudent = null,
+    onBack = null,
     onLongPressStart = null,
     onLongPressEnd = null,
     onOpenDash = null,
     hasSitDone = false,
 }) {
-    const [menuOpen, setMenuOpen] = useState(false);
-    const isAtelier = atelierMeta !== null;
+    const [helpOpen, setHelpOpen] = useState(false);
+
+    const isTeacher = mode === "teacher";
+    const isStudent = mode === "student";
 
     return (
-        <nav
-            className="fixed top-0 left-0 right-0 bg-gray-800 shadow-lg z-50 no-print"
-            aria-label="Barre de navigation principale"
-            style={{ fontFamily: "'Nunito', sans-serif" }}
-        >
-            <div className="max-w-full px-4">
-                <div className="flex items-center justify-between h-14">
-                    {/* ── Gauche : lien MiCetF ── */}
-                    <a
-                        href="https://micetf.fr"
-                        className="text-white font-semibold text-lg
-                                   hover:text-gray-300 transition shrink-0"
-                        title="Retour à MiCetF"
-                    >
-                        MiCetF
-                    </a>
-
-                    {/* ── Bouton hamburger — mobile uniquement ── */}
-                    <button
-                        type="button"
-                        onClick={() => setMenuOpen((v) => !v)}
-                        className="md:hidden inline-flex items-center justify-center p-2
-                                   text-gray-400 hover:text-white hover:bg-gray-700
-                                   rounded transition touch-manipulation"
-                        aria-controls="navbarMenu"
-                        aria-expanded={menuOpen}
-                        aria-label={
-                            menuOpen ? "Fermer le menu" : "Ouvrir le menu"
-                        }
-                    >
-                        <svg
-                            className="w-6 h-6"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+        <>
+            <nav
+                className="fixed top-0 left-0 right-0 bg-gray-800 shadow-lg z-50 h-14 no-print"
+                aria-label="Barre de navigation principale"
+                style={{ fontFamily: "'Nunito', sans-serif" }}
+            >
+                <div className="h-full max-w-full px-3 flex items-center justify-between">
+                    {/* ── Gauche ── */}
+                    {isTeacher && onBack ? (
+                        <button
+                            type="button"
+                            onClick={onBack}
+                            className="flex items-center gap-1 text-white/80
+                                       hover:text-white text-sm font-bold
+                                       transition-colors shrink-0 touch-manipulation
+                                       py-2 pr-2"
+                            aria-label="Retour"
                         >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d={
-                                    menuOpen
-                                        ? "M6 18L18 6M6 6l12 12"
-                                        : "M4 6h16M4 12h16M4 18h16"
-                                }
-                            />
-                        </svg>
-                    </button>
+                            ← <span className="hidden sm:inline">Retour</span>
+                        </button>
+                    ) : (
+                        <a
+                            href="https://micetf.fr"
+                            className="text-white font-semibold text-lg
+                                       hover:text-gray-300 transition shrink-0"
+                            title="Retour à MiCetF"
+                        >
+                            MiCetF
+                        </a>
+                    )}
 
-                    {/* ── Menu principal (desktop toujours visible, mobile déroulant) ── */}
-                    <div
-                        id="navbarMenu"
-                        className={`${menuOpen ? "flex" : "hidden"} md:flex md:items-center md:flex-1
-                                    flex-col md:flex-row absolute md:static top-14 left-0 right-0
-                                    bg-gray-800 md:bg-transparent px-4 md:px-0 pb-3 md:pb-0`}
-                    >
-                        {/* Centre */}
-                        <div className="flex items-center ml-0 md:ml-4 py-2 md:py-0">
+                    {/* ── Centre ── */}
+                    <div className="flex-1 flex items-center justify-center min-w-0 px-2">
+                        {isStudent && atelierMeta ? (
                             <NavCenter
-                                isAtelier={isAtelier}
+                                isAtelier={true}
                                 atelierMeta={atelierMeta}
                                 activeStudent={activeStudent}
                                 onLongPressStart={onLongPressStart}
                                 onLongPressEnd={onLongPressEnd}
                             />
-                        </div>
-
-                        <div className="flex-1" />
-
-                        {/* Droite */}
-                        <div className="mt-2 md:mt-0">
-                            <NavActions
-                                isAtelier={isAtelier}
-                                onOpenDash={onOpenDash}
-                                hasSitDone={hasSitDone}
-                            />
-                        </div>
+                        ) : isTeacher && atelierMeta ? (
+                            /* Teacher — badge atelier sans appui long */
+                            <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                    className="text-white font-semibold text-base shrink-0"
+                                    style={{
+                                        fontFamily: "'Fredoka', sans-serif",
+                                    }}
+                                >
+                                    {atelierMeta.icon} {atelierMeta.label}
+                                </span>
+                            </div>
+                        ) : (
+                            /* Visitor ou teacher home */
+                            <span
+                                className="text-white font-semibold text-base"
+                                style={{ fontFamily: "'Fredoka', sans-serif" }}
+                            >
+                                {isTeacher
+                                    ? "🎓 Espace enseignant·e"
+                                    : "🧮 Fractions CE1"}
+                            </span>
+                        )}
                     </div>
+
+                    {/* ── Droite ── */}
+                    <NavActions
+                        isAtelier={isStudent}
+                        showPaypal={!isTeacher && !isStudent}
+                        onOpenDash={isStudent ? onOpenDash : null}
+                        hasSitDone={hasSitDone}
+                        onHelp={() => setHelpOpen(true)}
+                    />
                 </div>
-            </div>
-        </nav>
+            </nav>
+
+            {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+        </>
     );
 }
 
 Navbar.propTypes = {
-    /** Métadonnées de l'atelier actif — null sur SetupScreen */
+    mode: PropTypes.oneOf(["visitor", "teacher", "student"]),
     atelierMeta: PropTypes.shape({
         icon: PropTypes.string.isRequired,
         label: PropTypes.string.isRequired,
         color: PropTypes.string.isRequired,
         light: PropTypes.string.isRequired,
         border: PropTypes.string.isRequired,
-        sub: PropTypes.string.isRequired,
     }),
-    /** Élève actif — null si aucun sélectionné */
     activeStudent: PropTypes.shape({
         id: PropTypes.string.isRequired,
         pseudo: PropTypes.string.isRequired,
     }),
-    /** Handlers d'appui long pour TeacherMenu */
+    onBack: PropTypes.func,
     onLongPressStart: PropTypes.func,
     onLongPressEnd: PropTypes.func,
-    /** Ouvre le Dashboard */
     onOpenDash: PropTypes.func,
-    /** Affiche un point vert sur le bouton 📊 */
     hasSitDone: PropTypes.bool,
 };

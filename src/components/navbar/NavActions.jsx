@@ -2,28 +2,26 @@
  * @file NavActions.jsx — zone droite de la barre de navigation.
  *
  * @description
- * Groupe de boutons d'action alignés à droite dans la Navbar.
+ * Boutons d'action alignés à droite. Comportement selon le contexte :
  *
- * ── Mode atelier (`isAtelier` true) ──────────────────────────────────
- *   [📊 Tableau de bord]  [? Aide]
- *   PayPal et email sont masqués pour ne pas perturber l'élève.
+ * ── Mode élève (`isAtelier` true) ────────────────────────────────────
+ *   [📊 Mes résultats]  [? Aide]
  *
- * ── Mode sélection (`isAtelier` false) ────────────────────────────────
- *   [? Aide]  [♥ Don PayPal]  [✉ Email]
+ * ── Mode visiteur (`isAtelier` false, `showPaypal` true) ─────────────
+ *   [? Aide]  [♥ Don]  [✉ Email]
  *
- * Le sujet de l'email est construit dynamiquement à partir de
- * `window.location.pathname`, encodé via `encodeURIComponent`.
+ * ── Mode enseignant (`isAtelier` false, `showPaypal` false) ──────────
+ *   [? Aide] uniquement
+ *
+ * `HelpModal` est désormais géré dans le parent (Navbar.jsx) via `onHelp`.
  *
  * @module navbar/NavActions
  */
 
-import { useState } from "react";
 import PropTypes from "prop-types";
-import HelpModal from "../ui/HelpModal.jsx";
 
 // ─── SVG Icons ─────────────────────────────────────────────────────────────────
 
-/** Icône cœur (don PayPal) */
 const IconHeart = () => (
     <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -35,7 +33,6 @@ const IconHeart = () => (
     </svg>
 );
 
-/** Icône enveloppe (email) */
 const IconMail = () => (
     <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -49,11 +46,6 @@ const IconMail = () => (
 
 // ─── Sous-composant : bouton Dashboard ────────────────────────────────────────
 
-/**
- * Bouton d'accès au tableau de bord — affiché uniquement en mode atelier.
- *
- * @param {{ onClick: Function, hasSitDone: boolean }} props
- */
 function DashButton({ onClick, hasSitDone }) {
     return (
         <li>
@@ -61,22 +53,20 @@ function DashButton({ onClick, hasSitDone }) {
                 type="button"
                 onClick={onClick}
                 className="relative flex items-center gap-1.5 px-3 py-2 rounded-lg
-                           text-white text-xs font-bold transition-colors hover:bg-white/20
-                           touch-manipulation"
+                           text-white text-xs font-bold transition-colors
+                           hover:bg-white/20 touch-manipulation"
                 style={{
                     background: "rgba(255,255,255,0.12)",
                     border: "1px solid rgba(255,255,255,0.2)",
                 }}
-                aria-label="Ouvrir le tableau de bord"
+                aria-label="Mes résultats"
             >
                 <span>📊</span>
-                <span className="hidden sm:inline">Tableau de bord</span>
-
-                {/* Point vert si au moins une situation terminée */}
+                <span className="hidden sm:inline">Mes résultats</span>
                 {hasSitDone && (
                     <span
                         className="absolute -top-0.5 -right-0.5 w-2 h-2
-                                   rounded-full bg-emerald-400"
+                                     rounded-full bg-emerald-400"
                         aria-hidden="true"
                     />
                 )}
@@ -93,102 +83,97 @@ DashButton.propTypes = {
 // ─── Composant principal ────────────────────────────────────────────────────────
 
 /**
- * Zone droite de la Navbar — boutons d'action contextuels.
- *
- * @param {boolean}       props.isAtelier   - Vrai si un atelier est actif
+ * @param {boolean}       props.isAtelier   - Vrai en mode élève (affiche 📊)
+ * @param {boolean}       props.showPaypal  - Vrai en mode visiteur (affiche don + email)
  * @param {Function|null} props.onOpenDash  - Ouvre le Dashboard
- * @param {boolean}       props.hasSitDone  - Point vert sur le bouton 📊
- * @returns {JSX.Element}
+ * @param {boolean}       props.hasSitDone  - Point vert sur 📊
+ * @param {Function}      props.onHelp      - Ouvre HelpModal
  */
-export default function NavActions({ isAtelier, onOpenDash, hasSitDone }) {
-    const [helpOpen, setHelpOpen] = useState(false);
-
-    /** Sujet de l'email basé sur le chemin courant */
+export default function NavActions({
+    isAtelier,
+    showPaypal,
+    onOpenDash,
+    hasSitDone,
+    onHelp,
+}) {
     const mailSubject = encodeURIComponent(
         `À propos de ${window.location.pathname}`
     );
-    const mailHref = `mailto:webmaster@micetf.fr?subject=${mailSubject}`;
 
     return (
-        <>
-            <ul className="flex items-center space-x-1">
-                {/* ── Tableau de bord — mode atelier uniquement ── */}
-                {isAtelier && onOpenDash && (
-                    <DashButton onClick={onOpenDash} hasSitDone={hasSitDone} />
-                )}
+        <ul className="flex items-center space-x-1 shrink-0">
+            {/* 📊 Résultats — mode élève uniquement */}
+            {isAtelier && onOpenDash && (
+                <DashButton onClick={onOpenDash} hasSitDone={hasSitDone} />
+            )}
 
-                {/* ── Aide ── */}
+            {/* ? Aide — toujours présent */}
+            <li>
+                <button
+                    type="button"
+                    onClick={onHelp}
+                    className="w-10 h-10 bg-blue-600 text-white rounded-full
+                               hover:bg-blue-700 transition font-bold text-lg
+                               touch-manipulation"
+                    title="Aide"
+                    aria-label="Ouvrir l'aide"
+                >
+                    ?
+                </button>
+            </li>
+
+            {/* ♥ Don PayPal — mode visiteur uniquement */}
+            {showPaypal && (
                 <li>
-                    <button
-                        type="button"
-                        onClick={() => setHelpOpen(true)}
-                        className="w-10 h-10 bg-blue-600 text-white rounded-full
-                                   hover:bg-blue-700 transition font-bold text-lg
-                                   touch-manipulation"
-                        title="Aide"
-                        aria-label="Ouvrir l'aide"
+                    <form
+                        action="https://www.paypal.com/cgi-bin/webscr"
+                        method="post"
+                        target="_top"
+                        className="inline-block"
                     >
-                        ?
-                    </button>
+                        <button
+                            type="submit"
+                            className="px-3 py-2 bg-yellow-500 text-white rounded
+                                       hover:bg-yellow-600 transition my-1 mx-1
+                                       touch-manipulation"
+                            title="Si vous pensez que ces outils le méritent… Merci !"
+                        >
+                            <IconHeart />
+                        </button>
+                        <input type="hidden" name="cmd" value="_s-xclick" />
+                        <input
+                            type="hidden"
+                            name="hosted_button_id"
+                            value="Q2XYVFP4EEX2J"
+                        />
+                    </form>
                 </li>
+            )}
 
-                {/* ── Don PayPal — mode sélection uniquement ── */}
-                {!isAtelier && (
-                    <li>
-                        <form
-                            action="https://www.paypal.com/cgi-bin/webscr"
-                            method="post"
-                            target="_top"
-                            className="inline-block"
-                        >
-                            <button
-                                type="submit"
-                                className="px-3 py-2 bg-yellow-500 text-white rounded
-                                           hover:bg-yellow-600 transition my-1 mx-1
-                                           touch-manipulation"
-                                title="Si vous pensez que ces outils le méritent… Merci !"
-                            >
-                                <IconHeart />
-                            </button>
-                            <input type="hidden" name="cmd" value="_s-xclick" />
-                            <input
-                                type="hidden"
-                                name="hosted_button_id"
-                                value="Q2XYVFP4EEX2J"
-                            />
-                        </form>
-                    </li>
-                )}
-
-                {/* ── Email — mode sélection uniquement ── */}
-                {!isAtelier && (
-                    <li>
-                        <a
-                            href={mailHref}
-                            className="px-3 py-2 bg-gray-600 text-white rounded
-                                       hover:bg-gray-700 transition my-1 mx-1
-                                       inline-block touch-manipulation"
-                            title="Pour contacter le webmaster…"
-                        >
-                            <IconMail />
-                        </a>
-                    </li>
-                )}
-            </ul>
-
-            {/* Modal d'aide */}
-            {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
-        </>
+            {/* ✉ Email — mode visiteur uniquement */}
+            {showPaypal && (
+                <li>
+                    <a
+                        href={`mailto:webmaster@micetf.fr?subject=${mailSubject}`}
+                        className="px-3 py-2 bg-gray-600 text-white rounded
+                                   hover:bg-gray-700 transition my-1 mx-1
+                                   inline-block touch-manipulation"
+                        title="Pour contacter le webmaster…"
+                    >
+                        <IconMail />
+                    </a>
+                </li>
+            )}
+        </ul>
     );
 }
 
 NavActions.propTypes = {
-    /** Vrai si un atelier est actif (masque PayPal et email) */
     isAtelier: PropTypes.bool.isRequired,
-    /** Ouvre le Dashboard — requis en mode atelier */
+    showPaypal: PropTypes.bool.isRequired,
     onOpenDash: PropTypes.func,
-    /** Affiche un point vert sur le bouton 📊 */
     hasSitDone: PropTypes.bool,
+    onHelp: PropTypes.func.isRequired,
 };
 
 NavActions.defaultProps = {

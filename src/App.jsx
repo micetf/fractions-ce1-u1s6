@@ -1,23 +1,39 @@
 /**
  * @file App.jsx — composant racine de l'application Fractions CE1.
  *
+ * @description
+ * Machine à états à trois modes exclusifs :
+ *
+ * ┌──────────┐  confirmation  ┌─────────┐
+ * │ VISITOR  │ ─────────────► │ TEACHER │
+ * │          │ ◄───── exit ── │         │
+ * │          │                └─────────┘
+ * │          │  session       ┌─────────┐
+ * │          │  active        │ STUDENT │
+ * └──────────┘ ─────────────► │         │
+ *                    ▲        │ long    │
+ *                    │        │ press   │
+ *                    │        │ (2s)    │
+ *                    │        │  ↓      │
+ *                    │        │ confirm │
+ *                    └────────┤ overlay │
+ *                             └─────────┘
+ *
+ * Le long press depuis le mode élève affiche `TeacherConfirmOverlay`
+ * avant de basculer — même friction que l'entrée depuis VisitorScreen.
+ *
  * @module App
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
-
 import { useEventLog } from "./hooks/useEventLog.js";
 import { useRoster } from "./hooks/useRoster.js";
 import { useStudentTraces } from "./hooks/useStudentTraces.js";
-import Navbar from "./components/Navbar.jsx";
-import SetupScreen from "./components/SetupScreen.jsx";
-import TeacherMenu from "./components/TeacherMenu.jsx";
-import Dashboard from "./components/dashboard/Dashboard.jsx";
-import StudentSelectScreen from "./components/roster/StudentSelectScreen.jsx";
-import AtelierTangram from "./components/ateliers/AtelierTangram.jsx";
-import AtelierDisques from "./components/ateliers/AtelierDisques.jsx";
-import AtelierCuisenaire from "./components/ateliers/AtelierCuisenaire.jsx";
 import { ATELIERS } from "./data/ateliers.js";
+
+import VisitorScreen from "./components/VisitorScreen.jsx";
+import TeacherSpace from "./components/teacher/TeacherSpace.jsx";
+import StudentSpace from "./components/student/StudentSpace.jsx";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
@@ -31,6 +47,13 @@ function readUrlAtelier() {
     return VALID_ATELIERS.includes(p) ? p : null;
 }
 
+/**
+ * Construit un SituationSnapshot depuis le journal d'événements.
+ *
+ * @param {import('./hooks/useEventLog').LogEvent[]} events
+ * @param {Object} sitDoneData
+ * @returns {import('./utils/tracesHelpers').SituationSnapshot}
+ */
 function buildSnapshot(events, sitDoneData) {
     const {
         idx,
@@ -69,29 +92,25 @@ function buildSnapshot(events, sitDoneData) {
 // ─── Composant ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-    const urlAtelier = readUrlAtelier();
-    const [atelier, setAtelier] = useState(urlAtelier);
-    const [totalSits, setTotalSits] = useState(
-        urlAtelier ? ATELIERS[urlAtelier].total : 0
-    );
-    const [showMenu, setShowMenu] = useState(false);
-    const [showDash, setShowDash] = useState(false);
+    // ── Machine à états ──────────────────────────────────────────────────────────
+    const [mode, setMode] = useState("visitor"); // 'visitor' | 'teacher' | 'student'
 
-    /**
-     * Contrôle l'accès à l'onglet Classe :
-     * false → bouton 📊 Navbar (élève) — Session uniquement
-     * true  → TeacherMenu (appui long) — Session + Classe
-     */
-    const [dashTeacherMode, setDashTeacherMode] = useState(false);
-    const [dashDefaultTab, setDashDefaultTab] = useState("session");
+    // ── État enseignant ───────────────────────────────────────────────────────────
+    const [teacherView, setTeacherView] = useState("home"); // 'home' | atelierID
+
+    // ── État session ──────────────────────────────────────────────────────────────
+    /** Atelier ouvert aux élèves — null = pas de session active */
+    const [launchedAtelier, setLaunchedAtelier] = useState(readUrlAtelier);
+
+    // ── État élève ────────────────────────────────────────────────────────────────
     const [activeStudent, setActiveStudent] = useState(null);
-    const [showStudentSelect, setShowStudentSelect] = useState(!!urlAtelier);
-
-    const { events, log, resetLog } = useEventLog();
     const [startTs, setStartTs] = useState(null);
-    const holdRef = useRef(null);
-    const processedCountRef = useRef(0);
 
+    // ── Confirmation retour enseignant (long press depuis mode élève) ─────────────
+    const [showTeacherConfirm, setShowTeacherConfirm] = useState(false);
+
+    // ── Hooks de données ──────────────────────────────────────────────────────────
+    const { events, log, resetLog } = useEventLog();
     const { students, addStudent, removeStudent } = useRoster();
     const {
         traces,
@@ -103,217 +122,176 @@ export default function App() {
         resetAll,
     } = useStudentTraces();
 
-    // ── Persistance incrémentale (curseur anti-batching React 18) ──────────────
+    const processedCountRef = useRef(0);
+    const holdRef = useRef(null);
 
+    // ── Persistance incrémentale ──────────────────────────────────────────────────
     useEffect(() => {
         if (events.length === 0) {
             processedCountRef.current = 0;
             return;
         }
-        if (!activeStudent || !atelier) return;
+        if (!activeStudent || !launchedAtelier) return;
         const newEvents = events.slice(processedCountRef.current);
         newEvents.forEach((event) => {
             if (event.type === "SIT_DONE")
                 appendSituation(
-                    atelier,
+                    launchedAtelier,
                     activeStudent.id,
                     buildSnapshot(events, event.data)
                 );
             else if (event.type === "ATELIER_DONE")
-                markCompleted(atelier, activeStudent.id);
+                markCompleted(launchedAtelier, activeStudent.id);
         });
         processedCountRef.current = events.length;
-    }, [events, activeStudent, atelier, appendSituation, markCompleted]);
+    }, [
+        events,
+        activeStudent,
+        launchedAtelier,
+        appendSituation,
+        markCompleted,
+    ]);
 
-    // ── Sélection atelier ────────────────────────────────────────────────────────
+    // ── Handlers : mode enseignant ────────────────────────────────────────────────
 
-    const selectAtelier = useCallback(
-        (id, total) => {
-            resetLog();
-            setAtelier(id);
-            setTotalSits(total);
+    /** Depuis VisitorScreen ou depuis la confirmation long press. */
+    const handleEnterTeacher = useCallback(() => {
+        setShowTeacherConfirm(false);
+        // Depuis le mode élève : pointe sur l'atelier en cours
+        if (mode === "student" && launchedAtelier) {
+            setTeacherView(launchedAtelier);
+        } else {
+            setTeacherView("home");
+        }
+        setMode("teacher");
+    }, [mode, launchedAtelier]);
+
+    /** L'enseignant quitte son espace → retour visiteur. */
+    const handleExitTeacher = useCallback(() => {
+        setMode("visitor");
+    }, []);
+
+    /** L'enseignant lance une session dans un atelier. */
+    const handleLaunchSession = useCallback(
+        (atelierID) => {
+            setLaunchedAtelier(atelierID);
             setActiveStudent(null);
-            setShowStudentSelect(true);
-            history.replaceState(null, "", `?atelier=${id}`);
+            setStartTs(null);
+            resetLog();
+            processedCountRef.current = 0;
+            history.replaceState(null, "", `?atelier=${atelierID}`);
+            setMode("student");
         },
         [resetLog]
     );
 
-    // ── Sélection / changement élève ─────────────────────────────────────────────
+    /** L'enseignant arrête la session en cours. */
+    const handleStopSession = useCallback(() => {
+        setLaunchedAtelier(null);
+        setActiveStudent(null);
+        setStartTs(null);
+        resetLog();
+        processedCountRef.current = 0;
+        history.replaceState(null, "", window.location.pathname);
+        setTeacherView("home");
+        setMode("teacher");
+    }, [resetLog]);
 
+    // ── Handlers : mode élève ─────────────────────────────────────────────────────
+
+    /** L'élève choisit son prénom. */
     const handleSelectStudent = useCallback(
         (student) => {
             resetLog();
+            processedCountRef.current = 0;
             setStartTs(Date.now());
-            openSession(atelier, student.id);
+            openSession(launchedAtelier, student.id);
             setActiveStudent(student);
-            setShowStudentSelect(false);
         },
-        [atelier, openSession, resetLog]
+        [launchedAtelier, openSession, resetLog]
     );
 
-    const handleChangeStudent = useCallback(() => {
+    /**
+     * L'élève passe la tablette → retour à StudentSelectScreen.
+     * La session reste ouverte sur le même atelier.
+     */
+    const handleNextStudent = useCallback(() => {
         setActiveStudent(null);
-        setShowStudentSelect(true);
-        setShowMenu(false);
-        setShowDash(false);
+        setStartTs(null);
         resetLog();
+        processedCountRef.current = 0;
     }, [resetLog]);
 
-    // ── Ouverture Dashboard ──────────────────────────────────────────────────────
+    // ── Long press : mode élève → confirmation retour enseignant ─────────────────
 
-    /** Élève — Session uniquement */
-    const handleOpenDash = useCallback(() => {
-        setDashTeacherMode(false);
-        setDashDefaultTab("session");
-        setShowDash(true);
-        setShowMenu(false);
+    const handleLongPressStart = useCallback(() => {
+        holdRef.current = setTimeout(() => {
+            setShowTeacherConfirm(true);
+        }, LONG_PRESS_DELAY);
     }, []);
 
-    /** Enseignant·e — Tableau de bord (session en premier) */
-    const handleOpenDashTeacher = useCallback(() => {
-        setDashTeacherMode(true);
-        setDashDefaultTab("session");
-        setShowDash(true);
-        setShowMenu(false);
+    const handleLongPressEnd = useCallback(() => {
+        clearTimeout(holdRef.current);
     }, []);
 
-    /** Enseignant·e — Gérer les élèves (onglet Classe direct) */
-    const handleManageRoster = useCallback(() => {
-        setDashTeacherMode(true);
-        setDashDefaultTab("classe");
-        setShowDash(true);
-        setShowMenu(false);
+    const handleCancelTeacherConfirm = useCallback(() => {
+        setShowTeacherConfirm(false);
     }, []);
 
-    const handleCloseDash = useCallback(() => {
-        setShowDash(false);
-        setDashTeacherMode(false);
-        setDashDefaultTab("session");
-    }, []);
+    // ── Rendu ─────────────────────────────────────────────────────────────────────
 
-    // ── Appui long ───────────────────────────────────────────────────────────────
+    const atelierMeta = launchedAtelier ? ATELIERS[launchedAtelier] : null;
 
-    const startHold = useCallback(() => {
-        holdRef.current = setTimeout(() => setShowMenu(true), LONG_PRESS_DELAY);
-    }, []);
-    const endHold = useCallback(() => clearTimeout(holdRef.current), []);
-
-    // ── Autres handlers TeacherMenu ──────────────────────────────────────────────
-
-    const handleChangeAtel = useCallback(() => {
-        resetLog();
-        setAtelier(null);
-        setActiveStudent(null);
-        setShowStudentSelect(false);
-        setShowMenu(false);
-        history.replaceState(null, "", window.location.pathname);
-    }, [resetLog]);
-
-    const handleCloseMenu = useCallback(() => setShowMenu(false), []);
-
-    // ── Écran sélection atelier ──────────────────────────────────────────────────
-
-    if (!atelier) {
+    if (mode === "teacher") {
         return (
-            <div
-                className="min-h-screen pt-14"
-                style={{ background: "#F1EDE4" }}
-            >
-                <Navbar />
-                <SetupScreen
-                    students={students}
-                    addStudent={addStudent}
-                    removeStudent={removeStudent}
-                    traces={traces}
-                    onSelect={selectAtelier}
-                />
-            </div>
+            <TeacherSpace
+                teacherView={teacherView}
+                setTeacherView={setTeacherView}
+                students={students}
+                addStudent={addStudent}
+                removeStudent={removeStudent}
+                traces={traces}
+                resetStudent={resetStudent}
+                resetStudentAll={resetStudentAll}
+                resetAll={resetAll}
+                launchedAtelier={launchedAtelier}
+                onLaunchSession={handleLaunchSession}
+                onStopSession={handleStopSession}
+                onExit={handleExitTeacher}
+            />
         );
     }
 
-    const m = ATELIERS[atelier];
-    const hasSitDone = events.some((e) => e.type === "SIT_DONE");
-
-    return (
-        <div className="min-h-screen pt-14" style={{ background: "#F1EDE4" }}>
-            <Navbar
-                atelierMeta={m}
+    if (mode === "student") {
+        return (
+            <StudentSpace
+                atelierMeta={atelierMeta}
+                students={students}
                 activeStudent={activeStudent}
-                onLongPressStart={startHold}
-                onLongPressEnd={endHold}
-                onOpenDash={handleOpenDash}
-                hasSitDone={hasSitDone}
+                events={events}
+                startTs={startTs}
+                log={log}
+                traces={traces}
+                launchedAtelier={launchedAtelier}
+                onSelectStudent={handleSelectStudent}
+                onNextStudent={handleNextStudent}
+                onLongPressStart={handleLongPressStart}
+                onLongPressEnd={handleLongPressEnd}
+                showTeacherConfirm={showTeacherConfirm}
+                onConfirmTeacher={handleEnterTeacher}
+                onCancelTeacherConfirm={handleCancelTeacherConfirm}
             />
+        );
+    }
 
-            <main
-                style={{ maxWidth: "680px", margin: "0 auto", padding: "16px" }}
-            >
-                <div className="bg-white rounded-3xl shadow-lg p-5">
-                    {atelier === "tg" && (
-                        <AtelierTangram
-                            key={`tg-${activeStudent?.id ?? "new"}`}
-                            log={log}
-                            onDone={handleChangeStudent}
-                        />
-                    )}
-                    {atelier === "dq" && (
-                        <AtelierDisques
-                            key={`dq-${activeStudent?.id ?? "new"}`}
-                            log={log}
-                            onDone={handleChangeStudent}
-                        />
-                    )}
-                    {atelier === "cu" && (
-                        <AtelierCuisenaire
-                            key={`cu-${activeStudent?.id ?? "new"}`}
-                            log={log}
-                            onDone={handleChangeStudent}
-                        />
-                    )}
-                </div>
-            </main>
-
-            {showStudentSelect && (
-                <StudentSelectScreen
-                    students={students}
-                    atelierMeta={m}
-                    onSelect={handleSelectStudent}
-                    addStudent={addStudent}
-                    removeStudent={removeStudent}
-                    traces={traces}
-                />
-            )}
-
-            {showMenu && (
-                <TeacherMenu
-                    onDash={handleOpenDashTeacher}
-                    onManage={handleManageRoster}
-                    onChange={handleChangeAtel}
-                    onChangeStudent={handleChangeStudent}
-                    onClose={handleCloseMenu}
-                />
-            )}
-
-            {showDash && (
-                <Dashboard
-                    events={events}
-                    atelierMeta={{ ...m, total: totalSits }}
-                    startTs={startTs}
-                    activeStudent={activeStudent}
-                    defaultTab={dashDefaultTab}
-                    teacherMode={dashTeacherMode}
-                    onClose={handleCloseDash}
-                    students={students}
-                    traces={traces}
-                    atelierID={atelier}
-                    addStudent={addStudent}
-                    removeStudent={removeStudent}
-                    resetStudent={resetStudent}
-                    resetStudentAll={resetStudentAll}
-                    resetAll={resetAll}
-                />
-            )}
-        </div>
+    // mode === 'visitor'
+    return (
+        <VisitorScreen
+            launchedAtelier={launchedAtelier}
+            atelierMeta={atelierMeta}
+            students={students}
+            onEnterTeacher={handleEnterTeacher}
+            onEnterStudent={() => setMode("student")}
+        />
     );
 }
