@@ -7,6 +7,14 @@
  * agrégés. Aucun état dupliqué — tout est dérivé des `events`.
  *
  * ────────────────────────────────────────────────────────────────
+ * Déplacement (refactoring niveau 1)
+ * ────────────────────────────────────────────────────────────────
+ * Fichier précédemment situé dans `components/dashboard/useSituationStats.js`.
+ * Déplacé ici car les hooks React (`use*`) doivent résider dans `hooks/`
+ * par convention et pour la maintenabilité.
+ * Seul import à mettre à jour : `Dashboard.jsx` → `../../hooks/useSituationStats.js`
+ *
+ * ────────────────────────────────────────────────────────────────
  * Événements traités
  * ────────────────────────────────────────────────────────────────
  * - SIT_START  : initialise l'entrée dans le map

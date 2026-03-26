@@ -45,46 +45,9 @@ import Dashboard from "./components/dashboard/Dashboard.jsx";
 import AtelierTangram from "./components/ateliers/AtelierTangram.jsx";
 import AtelierDisques from "./components/ateliers/AtelierDisques.jsx";
 import AtelierCuisenaire from "./components/ateliers/AtelierCuisenaire.jsx";
+import { ATELIERS } from "./data/ateliers.js";
 
 // ─── Métadonnées des ateliers ───────────────────────────────────────────────────
-
-/**
- * @typedef {Object} AtelierMeta
- * @property {string} icon   - Emoji représentatif
- * @property {string} label  - Nom affiché
- * @property {string} color  - Couleur thématique (hex)
- * @property {string} light  - Couleur de fond claire (hex)
- * @property {string} border - Couleur de bordure (hex)
- * @property {string} sub    - Sous-titre
- */
-
-/** @type {Object.<string, AtelierMeta>} */
-const META = {
-    tg: {
-        icon: "🔷",
-        label: "Tangram",
-        color: "#2563EB",
-        light: "#EFF6FF",
-        border: "#BFDBFE",
-        sub: "Fractions du carré",
-    },
-    dq: {
-        icon: "⭕",
-        label: "Disques",
-        color: "#7C3AED",
-        light: "#F5F3FF",
-        border: "#DDD6FE",
-        sub: "Fractions du disque",
-    },
-    cu: {
-        icon: "📏",
-        label: "Cuisenaire",
-        color: "#B45309",
-        light: "#FFFBEB",
-        border: "#FDE68A",
-        sub: "Fractions des réglettes",
-    },
-};
 
 /** Durée de l'appui long déclenchant le TeacherMenu (ms) */
 const LONG_PRESS_DELAY = 2000;
@@ -158,7 +121,7 @@ export default function App() {
     }
 
     // ── Vue atelier ─────────────────────────────────────────────────────────────
-    const m = META[atelier];
+    const m = ATELIERS[atelier];
     const hasSitDone = events.some((e) => e.type === "SIT_DONE");
 
     return (

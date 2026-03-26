@@ -15,55 +15,7 @@
  */
 
 import PropTypes from "prop-types";
-import { TG } from "../data/tangram.js";
-import { DQ } from "../data/disques.js";
-import { CUI } from "../data/cuisenaire.js";
-
-/**
- * @typedef {Object} AtelierChoice
- * @property {string} id    - Identifiant court ('tg' | 'dq' | 'cu')
- * @property {string} icon  - Emoji représentatif
- * @property {string} label - Titre court (ex : "Atelier 1")
- * @property {string} sub   - Sous-titre (nom du matériel)
- * @property {string} color - Couleur thématique (hex)
- * @property {string} light - Couleur de fond de la carte (hex)
- * @property {string} desc  - Description pédagogique courte
- * @property {number} total - Nombre de situations
- */
-
-/** @type {AtelierChoice[]} */
-const CHOICES = [
-    {
-        id: "tg",
-        icon: "🔷",
-        label: "Atelier 1",
-        sub: "Tangram",
-        color: "#2563EB",
-        light: "#EFF6FF",
-        desc: "Fractions du carré avec les pièces du Tangram",
-        total: TG.length,
-    },
-    {
-        id: "dq",
-        icon: "⭕",
-        label: "Atelier 2",
-        sub: "Disques",
-        color: "#7C3AED",
-        light: "#F5F3FF",
-        desc: "Fractions du disque avec les secteurs angulaires",
-        total: DQ.length,
-    },
-    {
-        id: "cu",
-        icon: "📏",
-        label: "Atelier 3",
-        sub: "Cuisenaire",
-        color: "#B45309",
-        light: "#FFFBEB",
-        desc: "Fractions des réglettes colorées",
-        total: CUI.length,
-    },
-];
+import { ATELIERS_LIST } from "../data/ateliers.js";
 
 // ─── Sous-composant : carte d'un atelier ───────────────────────────────────────
 
@@ -98,7 +50,7 @@ function AtelierCard({ choice: c, onSelect }) {
                         className="text-xs font-bold uppercase tracking-widest"
                         style={{ color: c.color }}
                     >
-                        {c.label} · {c.total} situation{c.total > 1 ? "s" : ""}
+                        {c.num} · {c.total} situation{c.total > 1 ? "s" : ""}
                     </p>
                     <p
                         className="text-xl font-bold text-slate-800 truncate"
@@ -168,7 +120,7 @@ export default function SetupScreen({ onSelect }) {
                 className="flex flex-col gap-4 w-full"
                 style={{ maxWidth: "400px" }}
             >
-                {CHOICES.map((c) => (
+                {ATELIERS_LIST.map((c) => (
                     <AtelierCard key={c.id} choice={c} onSelect={onSelect} />
                 ))}
             </div>

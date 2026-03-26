@@ -42,7 +42,7 @@ import ErrPill from "./ErrPill.jsx";
 import MetricCard from "./MetricCard.jsx";
 import ProgressionFrise from "./ProgressionFrise.jsx";
 import SituationsTable from "./SituationsTable.jsx";
-import { useSituationStats } from "./useSituationStats.js";
+import { useSituationStats } from "../../hooks/useSituationStats";
 
 // ─── Composant ─────────────────────────────────────────────────────────────────
 
