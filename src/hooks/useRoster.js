@@ -9,13 +9,15 @@
  * - Le pseudo est normalisé (trim) et ne peut être vide.
  * - La longueur maximale d'un pseudo est {@link MAX_PSEUDO_LENGTH} caractères.
  * - Les doublons (insensibles à la casse) sont rejetés.
- * - L'identifiant est un UUID v4 généré par `crypto.randomUUID()`.
+ * - L'identifiant est un UUID v4 généré par {@link generateUUID} — compatible
+ *   HTTP et HTTPS (contextes sécurisés et non sécurisés).
  *
  * @module useRoster
  */
 
 import { useState, useCallback } from "react";
 import { STORAGE_KEYS, readStorage, writeStorage } from "../utils/storage.js";
+import { generateUUID } from "../utils/uuid.js";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
@@ -33,7 +35,7 @@ export const MAX_PSEUDO_LENGTH = 20;
 
 /**
  * @typedef {Object} UseRosterReturn
- * @property {Student[]} students                       - Liste triée alphabétiquement
+ * @property {Student[]} students                          - Liste triée alphabétiquement
  * @property {Function}  addStudent    (pseudo) → err|null - Ajoute un élève
  * @property {Function}  removeStudent (id)    → void      - Supprime un élève
  * @property {Function}  renameStudent (id, pseudo) → err|null - Renomme un élève
@@ -94,7 +96,7 @@ export function useRoster() {
             const next = [
                 ...students,
                 {
-                    id: crypto.randomUUID(),
+                    id: generateUUID(), // ← était : crypto.randomUUID()
                     pseudo: pseudo.trim(),
                     createdAt: new Date().toISOString(),
                 },
