@@ -106,7 +106,7 @@ svg path {
 }
 
 @media print {
-    /* Règles générales (existantes) */
+    /* ── Règles générales (existantes) ── */
     .no-print {
         display: none !important;
     }
@@ -118,48 +118,33 @@ svg path {
         border-radius: 0 !important;
     }
 
-    /* ── Impression de StudentDetail depuis l'espace enseignant ──────────────
-     *
-     * StudentDetail (classe `print-student-detail`) et son conteneur
-     * `bg-slate-800` dans TeacherAtelierView sont conçus pour un fond sombre.
-     * Ces règles forcent fond blanc + texte lisible à l'impression.
-     * ─────────────────────────────────────────────────────────────────────── */
-
-    /* Fond blanc sur le panneau sombre et son contenu direct */
-    .print-student-detail,
+    /* ── Conteneur sombre de TeacherAtelierView ── */
     .bg-slate-800 {
+        background: white !important;
+        box-shadow: none !important;
+    }
+
+    /* ── Composant StudentDetail ── */
+    .print-student-detail {
         background: white !important;
         border-radius: 0 !important;
         box-shadow: none !important;
     }
 
-    /* Textes blancs/transparents → ardoise foncée */
+    /* Textes blancs/semi-transparents → ardoise foncée */
     .print-student-detail .text-white,
-    .print-student-detail [class*="text-white"] {
+    .print-student-detail [class*="text-white\/"] {
         color: #1e293b !important;
     }
 
-    /* Bordures blanches/transparentes → gris clair */
+    /* Bordures blanches/semi-transparentes → gris clair */
     .print-student-detail [class*="border-white"] {
         border-color: #e2e8f0 !important;
     }
 
-    /* Cartes métriques (fond sombre inline) → fond très clair */
-    .print-student-detail .grid > div {
+    /* Cartes métriques (bg inline sombre) → fond très clair */
+    .print-student-detail .grid > div[style*="background"] {
         background: #f1f5f9 !important;
-    }
-
-    /* Masquer tout le reste de la page — uniquement StudentDetail visible */
-    body > #root > * {
-        display: none !important;
-    }
-    .print-student-detail {
-        display: block !important;
-    }
-    /* Remonter le composant pour qu'il soit le seul visible */
-    .bg-slate-800 {
-        display: block !important;
-        padding: 0 !important;
-        margin: 0 !important;
+        color: #1e293b !important;
     }
 }
