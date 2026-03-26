@@ -2,16 +2,12 @@
  * @file StudentDetail.jsx — vue bilan d'un élève pour un atelier.
  *
  * @description
- * Affiche le bilan complet d'un élève depuis ses traces persistées,
- * avec exactement les mêmes informations que l'onglet Session en direct :
- * - Métriques synthèse (avancement, taux 1er essai, durée moy)
- * - Tableau détaillé par situation (SituationsTable)
- * - Distracteurs fréquents (ErrPill)
- * - Actions de réinitialisation contextuelles
+ * Affiche le bilan complet d'un élève depuis ses traces persistées.
+ * Le bouton 🖨 Imprimer est disponible uniquement si l'élève a des données.
  *
- * Réinitialisation disponible :
- * - Cet atelier uniquement
- * - Tous les ateliers (reset complet de l'élève)
+ * La classe `print-student-detail` sur le conteneur racine permet aux règles
+ * `@media print` de `index.css` de forcer fond blanc + texte sombre,
+ * rendant le composant lisible à l'impression malgré son contexte sombre.
  *
  * @module StudentDetail
  */
@@ -27,14 +23,11 @@ import ConfirmModal from "./ConfirmModal.jsx";
 
 // ─── Sous-composant : zone de réinitialisation ─────────────────────────────────
 
-/**
- * @param {{ pseudo:string, atelierLabel:string, onResetAtelier:Function, onResetAll:Function }} props
- */
 function ResetZone({ pseudo, atelierLabel, onResetAtelier, onResetAll }) {
-    const [pending, setPending] = useState(null); // 'atelier' | 'all' | null
+    const [pending, setPending] = useState(null);
 
     return (
-        <div className="border-t border-white/10 pt-3 mt-1">
+        <div className="border-t border-white/10 pt-3 mt-1 no-print">
             <p className="text-white/40 text-xs font-bold uppercase tracking-widest mb-2">
                 Réinitialisation
             </p>
@@ -59,27 +52,21 @@ function ResetZone({ pseudo, atelierLabel, onResetAtelier, onResetAll }) {
 
             {pending === "atelier" && (
                 <ConfirmModal
-                    title={`Réinitialiser ${pseudo} — ${atelierLabel} ?`}
-                    message={`La progression de ${pseudo} sur l'atelier ${atelierLabel} sera effacée.`}
+                    title={`Réinitialiser ${pseudo} sur ${atelierLabel} ?`}
+                    message="La progression de cet élève sur cet atelier sera effacée."
                     confirmLabel="Réinitialiser"
                     danger
-                    onConfirm={() => {
-                        setPending(null);
-                        onResetAtelier();
-                    }}
+                    onConfirm={onResetAtelier}
                     onCancel={() => setPending(null)}
                 />
             )}
             {pending === "all" && (
                 <ConfirmModal
-                    title={`Réinitialiser ${pseudo} — tous les ateliers ?`}
-                    message={`Toute la progression de ${pseudo} sur les trois ateliers sera effacée définitivement.`}
-                    confirmLabel="Tout réinitialiser"
+                    title={`Réinitialiser ${pseudo} sur tous les ateliers ?`}
+                    message="Toutes les traces de cet élève seront effacées."
+                    confirmLabel="Réinitialiser"
                     danger
-                    onConfirm={() => {
-                        setPending(null);
-                        onResetAll();
-                    }}
+                    onConfirm={onResetAll}
                     onCancel={() => setPending(null)}
                 />
             )}
@@ -98,7 +85,7 @@ ResetZone.propTypes = {
 
 /**
  * @param {Object}      props
- * @param {Object}      props.student       - Élève (id, pseudo)
+ * @param {Object}      props.student       - Élève ({ id, pseudo })
  * @param {Object|null} props.session       - Session persistée (null = pas commencé)
  * @param {Object}      props.atelierMeta   - Métadonnées de l'atelier (icon, label, total)
  * @param {Function}    props.onBack        - Retour à la liste classe
@@ -123,21 +110,24 @@ export default function StudentDetail({
             year: "2-digit",
         });
 
+    const hasDone = done.length > 0;
     return (
         <div
-            className="rounded-2xl mb-3"
+            className="rounded-2xl mb-3 print-student-detail"
             style={{ background: "rgba(255,255,255,.06)" }}
         >
             {/* ── En-tête ── */}
             <div className="flex items-center gap-3 p-4 border-b border-white/10">
+                {/* Retour — masqué à l'impression */}
                 <button
                     onClick={onBack}
-                    className="text-white/60 hover:text-white font-bold text-lg
-                               touch-manipulation transition-colors shrink-0"
+                    className="no-print text-white/60 hover:text-white font-bold
+                               text-lg touch-manipulation transition-colors shrink-0"
                     aria-label="Retour à la liste"
                 >
                     ←
                 </button>
+
                 <div className="flex-1 min-w-0">
                     <p
                         className="text-white font-bold text-lg truncate"
@@ -158,11 +148,59 @@ export default function StudentDetail({
                         )}
                     </p>
                 </div>
+
+                {/* Bouton imprimer — visible uniquement si données présentes */}
+                {hasDone && (
+                    <button
+                        onClick={() => window.print()}
+                        className="no-print w-9 h-9 flex items-center justify-center
+                                   rounded-xl text-base text-white/60
+                                   border border-white/20 hover:text-white
+                                   hover:bg-white/10 transition-colors
+                                   touch-manipulation shrink-0"
+                        title="Imprimer les résultats de cet élève"
+                        aria-label="Imprimer"
+                    >
+                        🖨
+                    </button>
+                )}
+            </div>
+
+            {/* ── En-tête imprimable — invisible à l'écran ── */}
+            <div className="hidden print:block px-4 pt-4 pb-2 border-b border-slate-200">
+                <p
+                    className="text-lg font-bold text-slate-800"
+                    style={{ fontFamily: "'Fredoka', sans-serif" }}
+                >
+                    🧮 Fractions CE1 — Résultats élève
+                </p>
+                <div className="flex flex-wrap gap-x-6 mt-1">
+                    <p className="text-sm font-bold text-slate-700">
+                        👤 {student.pseudo}
+                    </p>
+                    <p className="text-sm font-bold text-slate-700">
+                        {atelierMeta.icon} {atelierMeta.label}
+                    </p>
+                    {session && (
+                        <p className="text-sm font-bold text-slate-700">
+                            📅 {fmtDate(session.openedAt)}
+                            {session.completed ? " · ✓ terminé" : " · en cours"}
+                        </p>
+                    )}
+                    <p className="text-sm font-bold text-slate-700">
+                        🖨{" "}
+                        {new Date().toLocaleDateString("fr-FR", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                        })}
+                    </p>
+                </div>
             </div>
 
             {/* ── Contenu ── */}
             <div className="p-4">
-                {!session || done.length === 0 ? (
+                {!hasDone ? (
                     <p className="text-white/40 text-sm text-center py-6 font-semibold">
                         Aucune situation enregistrée pour cet élève.
                     </p>
@@ -223,7 +261,7 @@ export default function StudentDetail({
                     </>
                 )}
 
-                {/* Réinitialisation — toujours disponible */}
+                {/* Zone reset — masquée à l'impression via no-print dans ResetZone */}
                 <ResetZone
                     pseudo={student.pseudo}
                     atelierLabel={atelierMeta.label}

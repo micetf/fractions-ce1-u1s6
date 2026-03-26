@@ -3,49 +3,23 @@
  *
  * @description
  * Affiché quand toutes les situations d'un atelier sont terminées.
- * Propose deux actions :
+ * Propose trois actions :
  *
+ * - **🖨 Imprimer** : imprime les résultats de la session en cours
  * - **↺ Recommencer** : relance l'atelier (même élève)
- * - **→ Passer la tablette** : appelle `onDone` pour revenir à
- *   `StudentSelectScreen` et permettre à un autre élève de jouer.
- *
- * L'emoji et le message varient selon le taux de réussite :
- * - 100%    → 🏆 "Parfait !"
- * - 70–99%  → ⭐ "Très bien !"
- * - < 70%   → 💪 "Continue !"
+ * - **→ Passer la tablette** : revient à StudentSelectScreen
  *
  * @module DoneScreen
  */
 
 import PropTypes from "prop-types";
 
-/**
- * Retourne l'emoji et le message selon le pourcentage de réussite.
- *
- * @param {number} pct - Pourcentage 0–100
- * @returns {{ emoji: string, msg: string }}
- */
 function getOutcome(pct) {
     if (pct === 100) return { emoji: "🏆", msg: "Parfait !" };
     if (pct >= 70) return { emoji: "⭐", msg: "Très bien !" };
     return { emoji: "💪", msg: "Continue !" };
 }
 
-// ─── Composant ─────────────────────────────────────────────────────────────────
-
-/**
- * Écran de résultat final affiché à l'issue de l'atelier.
- *
- * @param {Object}   props
- * @param {number}   props.score   - Score obtenu
- * @param {number}   props.max     - Score maximal possible
- * @param {string}   props.label   - Nom de l'atelier (ex : "Tangram")
- * @param {Function} props.onReset - Relance l'atelier (même élève)
- * @param {Function} props.onDone  - Revient à StudentSelectScreen (élève suivant)
- * @param {string}   props.color   - Couleur thématique de l'atelier (hex)
- *
- * @returns {JSX.Element}
- */
 export default function DoneScreen({
     score,
     max,
@@ -87,7 +61,7 @@ export default function DoneScreen({
 
             {/* Actions */}
             <div className="flex flex-col gap-3 w-full max-w-xs">
-                {/* Action principale : passer la tablette à l'élève suivant */}
+                {/* Passer la tablette à l'élève suivant */}
                 <button
                     onClick={onDone}
                     className="text-white font-bold py-3 px-8 rounded-2xl text-lg
@@ -98,7 +72,7 @@ export default function DoneScreen({
                     Passer la tablette →
                 </button>
 
-                {/* Action secondaire : recommencer (même élève) */}
+                {/* Recommencer (même élève) */}
                 <button
                     onClick={onReset}
                     className="font-bold py-2.5 px-8 rounded-2xl text-base
@@ -107,6 +81,17 @@ export default function DoneScreen({
                     style={{ color, borderColor: color }}
                 >
                     ↺ Recommencer
+                </button>
+
+                {/* Imprimer les résultats — no-print masque ce bouton à l'impression */}
+                <button
+                    onClick={() => window.print()}
+                    className="no-print font-bold py-2 px-8 rounded-2xl text-sm
+                               border border-slate-200 text-slate-500
+                               hover:bg-slate-50 active:scale-95
+                               transition-all touch-manipulation bg-white"
+                >
+                    🖨 Imprimer mes résultats
                 </button>
             </div>
         </div>
@@ -118,7 +103,6 @@ DoneScreen.propTypes = {
     max: PropTypes.number.isRequired,
     label: PropTypes.string.isRequired,
     onReset: PropTypes.func.isRequired,
-    /** Appelé pour passer la tablette à l'élève suivant */
     onDone: PropTypes.func.isRequired,
     color: PropTypes.string.isRequired,
 };
