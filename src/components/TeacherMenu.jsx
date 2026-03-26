@@ -2,20 +2,18 @@
  * @file TeacherMenu — menu contextuel enseignant déclenché par appui long.
  *
  * @description
- * Panneau modal surgissant depuis le bas (bottom sheet) proposant trois actions
- * réservées à l'enseignant·e, accessibles via un appui long (≥ 2 s) sur la Navbar.
+ * Panneau modal surgissant depuis le bas (bottom sheet) proposant quatre
+ * actions réservées à l'enseignant·e, accessibles via un appui long (≥ 2 s).
  *
  * Actions disponibles :
- * - **Tableau de bord**  — ouvre le Dashboard de suivi en temps réel
- * - **Changer d'élève**  — réinitialise la session et rouvre StudentSelectScreen
- * - **Changer d'atelier** — réinitialise l'état et revient à SetupScreen
+ * - **Tableau de bord**   — ouvre le Dashboard onglet Session
+ * - **Gérer les élèves**  — ouvre le Dashboard onglet Classe (CRUD registre)
+ * - **Changer d'élève**   — réinitialise la session, garde l'atelier
+ * - **Changer d'atelier** — réinitialise et revient à SetupScreen
  *
- * ────────────────────────────────────────────────────────────────
- * Accessibilité
- * ────────────────────────────────────────────────────────────────
- * - `role="dialog"` + `aria-modal="true"` sur le panneau
- * - `aria-label` sur chaque bouton d'action
- * - Fond semi-transparent cliquable pour fermer
+ * L'accès à la gestion des élèves est ici le seul point d'entrée
+ * disponible pour l'élève — toutes les actions sont protégées par
+ * le geste d'appui long.
  *
  * @module TeacherMenu
  */
@@ -25,8 +23,6 @@ import PropTypes from "prop-types";
 // ─── Sous-composant : bouton d'action ──────────────────────────────────────────
 
 /**
- * Bouton d'action stylisé pour le menu enseignant.
- *
  * @param {Object}   props
  * @param {string}   props.icon       - Emoji de l'action
  * @param {string}   props.label      - Titre principal
@@ -37,8 +33,6 @@ import PropTypes from "prop-types";
  * @param {string}   props.subColor   - Classe Tailwind du sous-titre
  * @param {string}   props.hoverBg    - Classe Tailwind de survol
  * @param {Function} props.onClick    - Callback au clic
- *
- * @returns {JSX.Element}
  */
 function MenuAction({
     icon,
@@ -93,15 +87,15 @@ MenuAction.propTypes = {
  * Menu enseignant affiché en bottom sheet modal.
  *
  * @param {Object}   props
- * @param {Function} props.onDash          - Ouvre le tableau de bord
+ * @param {Function} props.onDash          - Ouvre le Dashboard (onglet Session)
+ * @param {Function} props.onManage        - Ouvre le Dashboard (onglet Classe)
  * @param {Function} props.onChangeStudent - Réinitialise la session élève
  * @param {Function} props.onChange        - Revient à la sélection d'atelier
  * @param {Function} props.onClose         - Ferme le menu sans action
- *
- * @returns {JSX.Element}
  */
 export default function TeacherMenu({
     onDash,
+    onManage,
     onChangeStudent,
     onChange,
     onClose,
@@ -120,16 +114,19 @@ export default function TeacherMenu({
                 className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-4 kf-up"
                 onClick={(e) => e.stopPropagation()}
             >
-                <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+                <p
+                    className="text-center text-xs font-bold text-slate-400
+                              uppercase tracking-widest mb-3"
+                >
                     Menu enseignant·e
                 </p>
 
                 <div className="flex flex-col gap-2">
-                    {/* Action : Tableau de bord */}
+                    {/* Tableau de bord — session en cours */}
                     <MenuAction
                         icon="📊"
                         label="Tableau de bord"
-                        sub="Suivi du groupe en temps réel"
+                        sub="Suivi de la session en cours"
                         bg="#EFF6FF"
                         border="#BFDBFE"
                         labelColor="text-blue-800"
@@ -138,20 +135,33 @@ export default function TeacherMenu({
                         onClick={onDash}
                     />
 
-                    {/* Action : Changer d'élève */}
+                    {/* Gérer les élèves — CRUD registre, unique point d'accès */}
                     <MenuAction
-                        icon="👤"
-                        label="Changer d'élève"
-                        sub="Réinitialise la session, garde l'atelier"
+                        icon="👥"
+                        label="Gérer les élèves"
+                        sub="Ajouter, supprimer, suivre la classe"
                         bg="#F0FDF4"
                         border="#BBF7D0"
                         labelColor="text-emerald-800"
                         subColor="text-emerald-600"
                         hoverBg="hover:bg-emerald-50"
+                        onClick={onManage}
+                    />
+
+                    {/* Changer d'élève */}
+                    <MenuAction
+                        icon="👤"
+                        label="Changer d'élève"
+                        sub="Réinitialise la session, garde l'atelier"
+                        bg="#F5F3FF"
+                        border="#DDD6FE"
+                        labelColor="text-violet-800"
+                        subColor="text-violet-600"
+                        hoverBg="hover:bg-violet-50"
                         onClick={onChangeStudent}
                     />
 
-                    {/* Action : Changer d'atelier */}
+                    {/* Changer d'atelier */}
                     <MenuAction
                         icon="🔄"
                         label="Changer d'atelier"
@@ -164,7 +174,6 @@ export default function TeacherMenu({
                         onClick={onChange}
                     />
 
-                    {/* Bouton Annuler */}
                     <button
                         onClick={onClose}
                         className="py-3 rounded-2xl text-slate-400 font-bold text-sm
@@ -179,12 +188,9 @@ export default function TeacherMenu({
 }
 
 TeacherMenu.propTypes = {
-    /** Ouvre le tableau de bord enseignant */
     onDash: PropTypes.func.isRequired,
-    /** Réinitialise la session élève (garde l'atelier) */
+    onManage: PropTypes.func.isRequired,
     onChangeStudent: PropTypes.func.isRequired,
-    /** Revient à l'écran de sélection d'atelier */
     onChange: PropTypes.func.isRequired,
-    /** Ferme le menu sans déclencher d'action */
     onClose: PropTypes.func.isRequired,
 };

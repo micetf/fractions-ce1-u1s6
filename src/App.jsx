@@ -10,32 +10,30 @@
  * 4. **Suivi**             (`Dashboard` à deux onglets + `TeacherMenu`)
  *
  * ────────────────────────────────────────────────────────────────
- * Persistance des traces — traitement incrémental
+ * Fin d'atelier — passage de tablette
  * ────────────────────────────────────────────────────────────────
- * `processedCountRef` mémorise le nombre d'événements déjà traités.
- * Le useEffect traite tous les NOUVEAUX événements depuis le dernier
- * rendu (events.slice(processedCountRef.current)), pas seulement le
- * dernier.
- *
- * Sans ce mécanisme, la dernière situation d'un atelier n'était pas
- * persistée : SIT_DONE et ATELIER_DONE étant émis dans le même appel
- * synchrone (doAdvance), React 18 les batchait en un seul rendu —
- * seul ATELIER_DONE était visible comme "dernier événement".
- *
- * Le curseur est remis à zéro quand events revient à [] (resetLog).
+ * `handleChangeStudent` est passé comme `onDone` aux trois ateliers.
+ * DoneScreen l'appelle via le bouton "Passer la tablette →", ce qui
+ * réouvre StudentSelectScreen sans changer d'atelier.
  *
  * ────────────────────────────────────────────────────────────────
- * Accès à la gestion des élèves
+ * Accès à la gestion des élèves — sécurisé
  * ────────────────────────────────────────────────────────────────
- * `handleManageRoster` ouvre le Dashboard directement sur l'onglet
- * "Classe". Il est accessible depuis `StudentSelectScreen` avant
- * toute session (startTs peut être null).
+ * `handleManageRoster` est désormais passé uniquement à `TeacherMenu`
+ * (protégé par l'appui long 2s). Il n'est plus accessible depuis
+ * `StudentSelectScreen`.
+ *
+ * ────────────────────────────────────────────────────────────────
+ * Persistance des traces — curseur incrémental
+ * ────────────────────────────────────────────────────────────────
+ * `processedCountRef` traite tous les nouveaux événements depuis le
+ * dernier rendu (résout le batching React 18 de SIT_DONE + ATELIER_DONE).
  *
  * ────────────────────────────────────────────────────────────────
  * Ouverture directe via URL
  * ────────────────────────────────────────────────────────────────
- * `?atelier=tg|dq|cu` bypasse SetupScreen et ouvre StudentSelectScreen.
- * `TeacherMenu → Changer d'atelier` remet l'URL à son état initial.
+ * `?atelier=tg|dq|cu` bypasse SetupScreen. `TeacherMenu → Changer
+ * d'atelier` remet l'URL à son état initial via history.replaceState.
  *
  * @module App
  */
@@ -57,25 +55,21 @@ import { ATELIERS } from "./data/ateliers.js";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
-/** Durée de l'appui long déclenchant le TeacherMenu (ms). */
 const LONG_PRESS_DELAY = 2000;
-
-/** Identifiants d'ateliers valides pour la lecture du paramètre URL. */
 const VALID_ATELIERS = ["tg", "dq", "cu"];
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-/** @returns {string|null} Identifiant d'atelier valide ou null. */
 function readUrlAtelier() {
     const p = new URLSearchParams(window.location.search).get("atelier");
     return VALID_ATELIERS.includes(p) ? p : null;
 }
 
 /**
- * Reconstruit un SituationSnapshot persistable depuis le journal d'événements.
+ * Reconstruit un SituationSnapshot depuis le journal d'événements.
  *
- * @param {Array}  events      - Journal complet (pour retrouver SIT_START et NAME_ERR)
- * @param {Object} sitDoneData - Payload de l'événement SIT_DONE
+ * @param {Array}  events
+ * @param {Object} sitDoneData - Payload de SIT_DONE
  * @returns {import('./utils/tracesHelpers.js').SituationSnapshot}
  */
 function buildSnapshot(events, sitDoneData) {
@@ -115,13 +109,8 @@ function buildSnapshot(events, sitDoneData) {
 
 // ─── Composant ─────────────────────────────────────────────────────────────────
 
-/**
- * Composant racine — gère le routage entre les vues et le journal d'événements.
- *
- * @returns {JSX.Element}
- */
 export default function App() {
-    // ── État de navigation ──────────────────────────────────────────────────────
+    // ── Navigation ──────────────────────────────────────────────────────────────
 
     const urlAtelier = readUrlAtelier();
     const [atelier, setAtelier] = useState(urlAtelier);
@@ -130,27 +119,19 @@ export default function App() {
     );
     const [showMenu, setShowMenu] = useState(false);
     const [showDash, setShowDash] = useState(false);
-
-    /**
-     * Onglet cible à l'ouverture du Dashboard.
-     * "session" par défaut, "classe" depuis StudentSelectScreen.
-     */
     const [dashDefaultTab, setDashDefaultTab] = useState("session");
-
-    /** Élève actif en session. null = StudentSelectScreen affiché. */
     const [activeStudent, setActiveStudent] = useState(null);
     const [showStudentSelect, setShowStudentSelect] = useState(!!urlAtelier);
 
-    // ── Hooks ───────────────────────────────────────────────────────────────────
+    // ── Hooks ────────────────────────────────────────────────────────────────────
 
     const { events, log, resetLog } = useEventLog();
     const [startTs, setStartTs] = useState(null);
     const holdRef = useRef(null);
 
     /**
-     * Curseur de traitement incrémental des événements.
-     * Pointe vers le nombre d'événements déjà persistés.
-     * Remis à 0 à chaque resetLog (events → []).
+     * Curseur incrémental de persistance.
+     * Évite de rater des événements batchés par React 18.
      */
     const processedCountRef = useRef(0);
 
@@ -165,18 +146,15 @@ export default function App() {
         resetAll,
     } = useStudentTraces();
 
-    // ── Persistance incrémentale des traces ─────────────────────────────────────
+    // ── Persistance incrémentale des traces ──────────────────────────────────────
 
     useEffect(() => {
-        // Remise à zéro du curseur quand le journal est vidé (resetLog)
         if (events.length === 0) {
             processedCountRef.current = 0;
             return;
         }
-
         if (!activeStudent || !atelier) return;
 
-        // Traitement de tous les événements non encore persistés
         const newEvents = events.slice(processedCountRef.current);
         newEvents.forEach((event) => {
             if (event.type === "SIT_DONE") {
@@ -189,11 +167,10 @@ export default function App() {
                 markCompleted(atelier, activeStudent.id);
             }
         });
-
         processedCountRef.current = events.length;
     }, [events, activeStudent, atelier, appendSituation, markCompleted]);
 
-    // ── Sélection de l'atelier (enseignant·e) ───────────────────────────────────
+    // ── Sélection de l'atelier ───────────────────────────────────────────────────
 
     const selectAtelier = useCallback(
         (id, total) => {
@@ -207,7 +184,7 @@ export default function App() {
         [resetLog]
     );
 
-    // ── Sélection de l'élève ────────────────────────────────────────────────────
+    // ── Sélection / changement d'élève ───────────────────────────────────────────
 
     const handleSelectStudent = useCallback(
         (student) => {
@@ -220,22 +197,29 @@ export default function App() {
         [atelier, openSession, resetLog]
     );
 
+    /**
+     * Réinitialise la session élève sans changer d'atelier.
+     * Appelé depuis TeacherMenu ("Changer d'élève")
+     * ET depuis DoneScreen ("Passer la tablette →") via onDone.
+     */
     const handleChangeStudent = useCallback(() => {
         setActiveStudent(null);
         setShowStudentSelect(true);
         setShowMenu(false);
+        setShowDash(false);
         resetLog();
     }, [resetLog]);
 
-    // ── Gestion du registre — accès direct depuis StudentSelectScreen ────────────
+    // ── Gestion du registre ──────────────────────────────────────────────────────
 
+    /** Ouvre le Dashboard sur l'onglet Classe. Accessible via TeacherMenu uniquement. */
     const handleManageRoster = useCallback(() => {
         setDashDefaultTab("classe");
         setShowDash(true);
         setShowMenu(false);
     }, []);
 
-    // ── Appui long — accès menu enseignant·e ────────────────────────────────────
+    // ── Appui long ───────────────────────────────────────────────────────────────
 
     const startHold = useCallback(() => {
         holdRef.current = setTimeout(() => setShowMenu(true), LONG_PRESS_DELAY);
@@ -261,8 +245,6 @@ export default function App() {
     }, [resetLog]);
 
     const handleCloseMenu = useCallback(() => setShowMenu(false), []);
-
-    // ── Fermeture du Dashboard ──────────────────────────────────────────────────
 
     const handleCloseDash = useCallback(() => {
         setShowDash(false);
@@ -303,10 +285,26 @@ export default function App() {
                 style={{ maxWidth: "680px", margin: "0 auto", padding: "16px" }}
             >
                 <div className="bg-white rounded-3xl shadow-lg p-5">
-                    {atelier === "tg" && <AtelierTangram key="tg" log={log} />}
-                    {atelier === "dq" && <AtelierDisques key="dq" log={log} />}
+                    {atelier === "tg" && (
+                        <AtelierTangram
+                            key="tg"
+                            log={log}
+                            onDone={handleChangeStudent}
+                        />
+                    )}
+                    {atelier === "dq" && (
+                        <AtelierDisques
+                            key="dq"
+                            log={log}
+                            onDone={handleChangeStudent}
+                        />
+                    )}
                     {atelier === "cu" && (
-                        <AtelierCuisenaire key="cu" log={log} />
+                        <AtelierCuisenaire
+                            key="cu"
+                            log={log}
+                            onDone={handleChangeStudent}
+                        />
                     )}
                 </div>
                 <p className="text-center text-xs text-slate-300 font-semibold mt-4 no-print">
@@ -315,20 +313,20 @@ export default function App() {
                 </p>
             </main>
 
-            {/* Sélection de l'élève — overlay z-40, sous Navbar z-50 */}
+            {/* Sélection de l'élève — z-40, sous Navbar z-50 */}
             {showStudentSelect && (
                 <StudentSelectScreen
                     students={students}
                     atelierMeta={m}
                     onSelect={handleSelectStudent}
-                    onManage={handleManageRoster}
                 />
             )}
 
-            {/* Menu enseignant·e */}
+            {/* Menu enseignant·e — seul point d'accès à la gestion des élèves */}
             {showMenu && (
                 <TeacherMenu
                     onDash={handleOpenDash}
+                    onManage={handleManageRoster}
                     onChange={handleChangeAtel}
                     onChangeStudent={handleChangeStudent}
                     onClose={handleCloseMenu}

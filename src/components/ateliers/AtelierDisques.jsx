@@ -88,7 +88,7 @@ const CENTER = 100;
  * @param {Object}   props
  * @param {Function} props.log - Émetteur d'événements pédagogiques
  */
-export default function AtelierDisques({ log }) {
+export default function AtelierDisques({ log, onDone }) {
     const [idx, setIdx] = useState(0);
     const [placed, setPlaced] = useState(0);
     const [phase, setPhase] = useState("predict");
@@ -310,6 +310,7 @@ export default function AtelierDisques({ log }) {
                 max={MAX_SCORE}
                 label="Disques"
                 onReset={reset}
+                onDone={onDone}
                 color={COLOR}
             />
         );
@@ -449,4 +450,5 @@ export default function AtelierDisques({ log }) {
 
 AtelierDisques.propTypes = {
     log: PropTypes.func.isRequired,
+    onDone: PropTypes.func.isRequired,
 };
