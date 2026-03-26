@@ -6,15 +6,10 @@
  * - `activeStudent === null` → StudentSelectScreen (choix du prénom)
  * - `activeStudent !== null` → Atelier actif + Dashboard résultats propres
  *
- * **Retour enseignant par long press :**
- * Un appui long (≥ 2 s) sur la zone centrale de la Navbar déclenche
- * `showTeacherConfirm` dans App. `TeacherConfirmOverlay` s'affiche alors
- * par-dessus l'atelier — l'élève ne peut pas y accéder accidentellement.
- *
- * **Isolation de sécurité :**
- * Aucun accès à RosterManager, ClassTracker ou données d'autres élèves.
- * Le Dashboard passé ici opère en `teacherMode={false}` avec des props
- * enseignant volontairement vides.
+ * La Navbar est présente dans les deux cas. Sur l'écran de sélection,
+ * la zone centrale affiche le badge atelier (sans badge élève) et le
+ * long press fonctionne déjà — permettant à l'enseignant de reprendre
+ * la main même avant qu'un élève ait été sélectionné.
  *
  * @module student/StudentSpace
  */
@@ -38,7 +33,7 @@ import TeacherConfirmOverlay from "../ui/TeacherConfirmOverlay.jsx";
  * @param {number|null} props.startTs                - Timestamp de démarrage session
  * @param {Function}    props.log                    - Émet un événement
  * @param {Object}      props.traces                 - Store de traces (lecture seule)
- * @param {string}      props.launchedAtelier         - ID de l'atelier en session
+ * @param {string}      props.launchedAtelier        - ID de l'atelier en session
  * @param {Function}    props.onSelectStudent        - L'élève choisit son prénom
  * @param {Function}    props.onNextStudent          - Passer la tablette
  * @param {Function}    props.onLongPressStart       - Début appui long
@@ -67,16 +62,36 @@ export default function StudentSpace({
     const [showDash, setShowDash] = useState(false);
     const hasSitDone = events.some((e) => e.type === "SIT_DONE");
 
+    // ── Navbar partagée par les deux sous-états ────────────────────────────────
+    // Présente dès l'écran de sélection : badge atelier visible, long press actif.
+    const navbar = (
+        <Navbar
+            mode="student"
+            atelierMeta={atelierMeta}
+            activeStudent={activeStudent} // null sur select screen → pas de badge élève
+            onLongPressStart={onLongPressStart}
+            onLongPressEnd={onLongPressEnd}
+            hasSitDone={hasSitDone}
+            onOpenDash={activeStudent ? () => setShowDash(true) : null}
+        />
+    );
+
     // ── Écran de sélection ────────────────────────────────────────────────────
     if (!activeStudent) {
         return (
             <>
-                <StudentSelectScreen
-                    students={students}
-                    atelierMeta={atelierMeta}
-                    onSelect={onSelectStudent}
-                />
-                {/* L'overlay reste accessible même depuis la sélection */}
+                {navbar}
+                <div
+                    className="min-h-screen pt-14"
+                    style={{ background: "#F1EDE4" }}
+                >
+                    <StudentSelectScreen
+                        students={students}
+                        atelierMeta={atelierMeta}
+                        onSelect={onSelectStudent}
+                    />
+                </div>
+
                 {showTeacherConfirm && (
                     <TeacherConfirmOverlay
                         onConfirm={onConfirmTeacher}
@@ -94,15 +109,7 @@ export default function StudentSpace({
                 className="min-h-screen pt-14"
                 style={{ background: "#F1EDE4" }}
             >
-                <Navbar
-                    mode="student"
-                    atelierMeta={atelierMeta}
-                    activeStudent={activeStudent}
-                    onLongPressStart={onLongPressStart}
-                    onLongPressEnd={onLongPressEnd}
-                    hasSitDone={hasSitDone}
-                    onOpenDash={() => setShowDash(true)}
-                />
+                {navbar}
 
                 <main
                     style={{
@@ -147,7 +154,7 @@ export default function StudentSpace({
                     defaultTab="session"
                     teacherMode={false}
                     onClose={() => setShowDash(false)}
-                    /* Props enseignant neutralisées — jamais accessibles en mode élève */
+                    /* Props enseignant neutralisées */
                     students={[]}
                     traces={{}}
                     atelierID={launchedAtelier}
