@@ -8,11 +8,14 @@
  * - après qu'un élève a terminé sa session ("Changer d'élève")
  *
  * Cet écran est **bloquant** : aucun accès à l'atelier sans sélection.
- * Le contexte de l'atelier ouvert (icon + label) est affiché pour que
- * l'élève sache sur quelle tablette il se trouve.
  *
- * Si le registre est vide, un message d'attente est affiché à la place
- * de la liste — l'atelier reste inaccessible.
+ * ────────────────────────────────────────────────────────────────
+ * Accès à la gestion des élèves
+ * ────────────────────────────────────────────────────────────────
+ * Un bouton discret "⚙ Gérer les élèves" est affiché en bas de
+ * l'écran. Il est intentionnellement sobre pour ne pas attirer
+ * l'attention des élèves. Il est l'unique point d'entrée au premier
+ * lancement quand le registre est encore vide.
  *
  * @module StudentSelectScreen
  */
@@ -25,11 +28,12 @@ import StudentCard from "./StudentCard.jsx";
 /**
  * Message affiché quand aucun élève n'est encore dans le registre.
  *
- * @param {Object} props
- * @param {string} props.color - Couleur thématique de l'atelier
+ * @param {Object}   props
+ * @param {string}   props.color    - Couleur thématique de l'atelier
+ * @param {Function} props.onManage - Ouvre la gestion des élèves
  * @returns {JSX.Element}
  */
-function EmptyRoster({ color }) {
+function EmptyRoster({ color, onManage }) {
     return (
         <div className="flex flex-col items-center gap-3 py-8 px-4 text-center">
             <span className="text-5xl">🙋</span>
@@ -40,22 +44,24 @@ function EmptyRoster({ color }) {
                 Aucun élève dans la liste
             </p>
             <p className="text-slate-500 text-sm font-semibold">
-                Demande à ton enseignant·e d&apos;ajouter les élèves dans le
-                tableau de bord.
+                Utilise le bouton ci-dessous pour ajouter les élèves de ta
+                classe.
             </p>
-            {/* Indicateur visuel de l'atelier — repère pour l'élève */}
-            <div
-                className="mt-2 text-xs font-bold px-3 py-1 rounded-lg"
-                style={{ color, background: `${color}18` }}
+            <button
+                onClick={onManage}
+                className="mt-2 px-5 py-2.5 rounded-xl text-white font-bold text-sm
+                           transition-colors touch-manipulation"
+                style={{ background: color }}
             >
-                Cette tablette est en attente de configuration
-            </div>
+                ⚙ Gérer les élèves
+            </button>
         </div>
     );
 }
 
 EmptyRoster.propTypes = {
     color: PropTypes.string.isRequired,
+    onManage: PropTypes.func.isRequired,
 };
 
 // ─── Composant principal ────────────────────────────────────────────────────────
@@ -63,12 +69,11 @@ EmptyRoster.propTypes = {
 /**
  * Overlay de sélection d'élève — bloquant, plein écran.
  *
- * @param {Object}        props
- * @param {import('../../hooks/useRoster.js').Student[]} props.students
- *   Liste des élèves du registre (depuis useRoster)
- * @param {import('../../data/ateliers.js').AtelierConfig} props.atelierMeta
- *   Métadonnées de l'atelier actif (icon, label, color, light, border)
- * @param {Function}      props.onSelect - Callback(student: Student) → void
+ * @param {Object}   props
+ * @param {Array}    props.students    - Liste des élèves du registre (useRoster)
+ * @param {Object}   props.atelierMeta - Métadonnées de l'atelier actif
+ * @param {Function} props.onSelect   - Callback(student: Student) → void
+ * @param {Function} props.onManage   - Ouvre le Dashboard sur l'onglet Classe
  *
  * @returns {JSX.Element}
  */
@@ -76,6 +81,7 @@ export default function StudentSelectScreen({
     students,
     atelierMeta,
     onSelect,
+    onManage,
 }) {
     const { icon, label, color, light, border } = atelierMeta;
 
@@ -85,10 +91,12 @@ export default function StudentSelectScreen({
                        justify-center p-5 kf-up"
             style={{ background: "#F1EDE4" }}
         >
-            <div className="w-full" style={{ maxWidth: "400px" }}>
+            <div
+                className="w-full flex flex-col items-center"
+                style={{ maxWidth: "400px" }}
+            >
                 {/* ── En-tête ── */}
                 <div className="text-center mb-6">
-                    {/* Badge atelier */}
                     <div
                         className="inline-flex items-center gap-2 px-4 py-1.5
                                    rounded-full text-sm font-bold mb-4"
@@ -115,9 +123,9 @@ export default function StudentSelectScreen({
 
                 {/* ── Liste élèves ou état vide ── */}
                 {students.length === 0 ? (
-                    <EmptyRoster color={color} />
+                    <EmptyRoster color={color} onManage={onManage} />
                 ) : (
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-3 w-full">
                         {students.map((student) => (
                             <StudentCard
                                 key={student.id}
@@ -130,20 +138,30 @@ export default function StudentSelectScreen({
                         ))}
                     </div>
                 )}
+
+                {/* ── Accès gestion élèves — toujours visible ── */}
+                {students.length > 0 && (
+                    <button
+                        onClick={onManage}
+                        className="mt-8 text-slate-400 text-xs font-bold
+                                   hover:text-slate-600 transition-colors
+                                   touch-manipulation underline underline-offset-2"
+                    >
+                        ⚙ Gérer les élèves (enseignant·e)
+                    </button>
+                )}
             </div>
         </div>
     );
 }
 
 StudentSelectScreen.propTypes = {
-    /** Liste des élèves issue de useRoster */
     students: PropTypes.arrayOf(
         PropTypes.shape({
             id: PropTypes.string.isRequired,
             pseudo: PropTypes.string.isRequired,
         })
     ).isRequired,
-    /** Métadonnées de l'atelier actif */
     atelierMeta: PropTypes.shape({
         icon: PropTypes.string.isRequired,
         label: PropTypes.string.isRequired,
@@ -151,6 +169,7 @@ StudentSelectScreen.propTypes = {
         light: PropTypes.string.isRequired,
         border: PropTypes.string.isRequired,
     }).isRequired,
-    /** Déclenché quand l'élève clique sur sa carte */
     onSelect: PropTypes.func.isRequired,
+    /** Ouvre le Dashboard sur l'onglet "Suivi classe" */
+    onManage: PropTypes.func.isRequired,
 };

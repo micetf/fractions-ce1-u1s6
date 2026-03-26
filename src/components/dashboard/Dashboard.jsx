@@ -16,7 +16,13 @@
  * - RosterManager : CRUD du registre d'élèves
  * - ClassTracker  : progression élèves × atelier courant + resets
  *
- * L'impression (window.print) reste disponible sur l'onglet Session.
+ * ────────────────────────────────────────────────────────────────
+ * Ouverture ciblée
+ * ────────────────────────────────────────────────────────────────
+ * La prop `defaultTab` permet d'ouvrir le Dashboard directement sur
+ * l'onglet "Classe" (ex : depuis StudentSelectScreen avant toute session).
+ * Quand `startTs` est null, l'onglet Session est masqué pour éviter
+ * un LiveTimer sans timestamp de départ.
  *
  * @module Dashboard
  */
@@ -34,11 +40,9 @@ import RosterManager from "./RosterManager.jsx";
 import ClassTracker from "./ClassTracker.jsx";
 import { useSituationStats } from "../../hooks/useSituationStats";
 
-// ─── Sous-composant : sélecteur d'onglet ───────────────────────────────────────
+// ─── Sous-composant : bouton d'onglet ──────────────────────────────────────────
 
 /**
- * Bouton d'onglet individuel.
- *
  * @param {{ label:string, active:boolean, onClick:Function }} props
  */
 function Tab({ label, active, onClick }) {
@@ -71,15 +75,16 @@ Tab.propTypes = {
  * @param {Object}      props
  * @param {Array}       props.events         - Journal complet des événements
  * @param {Object}      props.atelierMeta    - Métadonnées de l'atelier (icon, label, color, total)
- * @param {number}      props.startTs        - Timestamp de début de séance
+ * @param {number|null} props.startTs        - Timestamp début de séance (null avant première session)
+ * @param {string}      [props.defaultTab]   - Onglet affiché à l'ouverture ("session"|"classe")
  * @param {Function}    props.onClose        - Ferme le Dashboard
  * @param {Array}       props.students       - Registre élèves (useRoster)
  * @param {Object}      props.traces         - Store de traces (useStudentTraces)
  * @param {string}      props.atelierID      - Identifiant atelier courant
  * @param {Function}    props.addStudent     - Ajoute un élève
  * @param {Function}    props.removeStudent  - Supprime un élève
- * @param {Function}    props.resetStudent   - Reset individuel
- * @param {Function}    props.resetAtelier   - Reset par atelier
+ * @param {Function}    props.resetStudent   - Reset individuel (atelierID, studentId)
+ * @param {Function}    props.resetAtelier   - Reset par atelier (atelierID)
  * @param {Function}    props.resetAll       - Reset total
  *
  * @returns {JSX.Element}
@@ -88,6 +93,7 @@ export default function Dashboard({
     events,
     atelierMeta,
     startTs,
+    defaultTab = "session",
     onClose,
     students,
     traces,
@@ -98,9 +104,12 @@ export default function Dashboard({
     resetAtelier,
     resetAll,
 }) {
-    const [tab, setTab] = useState("session");
+    const [tab, setTab] = useState(defaultTab);
     const { sits, done, current, allDistractors, firstTryPct, avgDur } =
         useSituationStats(events);
+
+    // Si aucune session n'a démarré, l'onglet Session n'a pas de sens
+    const hasSession = startTs !== null;
 
     return (
         <div
@@ -131,7 +140,7 @@ export default function Dashboard({
                             </div>
                         </div>
                         <div className="flex gap-2">
-                            {tab === "session" && (
+                            {tab === "session" && hasSession && (
                                 <button
                                     onClick={() => window.print()}
                                     className="text-white/60 hover:text-white text-xs font-bold
@@ -155,11 +164,13 @@ export default function Dashboard({
 
                     {/* ── Sélecteur d'onglets ── */}
                     <div className="flex gap-1 mb-4 no-print border-b border-white/10 pb-1">
-                        <Tab
-                            label="📊 Session en cours"
-                            active={tab === "session"}
-                            onClick={() => setTab("session")}
-                        />
+                        {hasSession && (
+                            <Tab
+                                label="📊 Session en cours"
+                                active={tab === "session"}
+                                onClick={() => setTab("session")}
+                            />
+                        )}
                         <Tab
                             label="👥 Suivi classe"
                             active={tab === "classe"}
@@ -168,8 +179,9 @@ export default function Dashboard({
                     </div>
 
                     {/* ════ ONGLET SESSION ════ */}
-                    {tab === "session" && (
+                    {tab === "session" && hasSession && (
                         <>
+                            {/* Métriques synthèse */}
                             <div className="grid grid-cols-3 gap-2 mb-4">
                                 <MetricCard
                                     icon="🕐"
@@ -198,14 +210,20 @@ export default function Dashboard({
                                     color="#F9A8D4"
                                 />
                             </div>
+
                             <ProgressionFrise
                                 sits={sits}
                                 total={atelierMeta.total}
                             />
                             <SituationsTable done={done} />
+
+                            {/* Distracteurs */}
                             {allDistractors.length > 0 && (
                                 <div className="bg-white rounded-2xl p-4 mb-3">
-                                    <p className="text-slate-600 text-xs font-bold uppercase tracking-widest mb-2">
+                                    <p
+                                        className="text-slate-600 text-xs font-bold
+                                                  uppercase tracking-widest mb-2"
+                                    >
                                         Erreurs repérées — distracteurs
                                     </p>
                                     <div className="flex flex-wrap gap-2">
@@ -220,9 +238,14 @@ export default function Dashboard({
                                     </div>
                                 </div>
                             )}
+
+                            {/* Situation en cours */}
                             {current && (
                                 <div className="bg-white/10 rounded-2xl p-4 mb-3">
-                                    <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-1">
+                                    <p
+                                        className="text-white/70 text-xs font-bold
+                                                  uppercase tracking-widest mb-1"
+                                    >
                                         Situation en cours
                                     </p>
                                     <p className="text-white font-bold">
@@ -244,6 +267,8 @@ export default function Dashboard({
                                     )}
                                 </div>
                             )}
+
+                            {/* Pied de page */}
                             <div
                                 className="rounded-2xl p-3"
                                 style={{ background: "rgba(255,255,255,.06)" }}
@@ -296,7 +321,10 @@ Dashboard.propTypes = {
         color: PropTypes.string.isRequired,
         total: PropTypes.number.isRequired,
     }).isRequired,
-    startTs: PropTypes.number.isRequired,
+    /** Timestamp de début de séance — null avant la première session élève */
+    startTs: PropTypes.number,
+    /** Onglet affiché à l'ouverture ("session" | "classe") */
+    defaultTab: PropTypes.oneOf(["session", "classe"]),
     onClose: PropTypes.func.isRequired,
     students: PropTypes.array.isRequired,
     traces: PropTypes.object.isRequired,
@@ -306,4 +334,9 @@ Dashboard.propTypes = {
     resetStudent: PropTypes.func.isRequired,
     resetAtelier: PropTypes.func.isRequired,
     resetAll: PropTypes.func.isRequired,
+};
+
+Dashboard.defaultProps = {
+    startTs: null,
+    defaultTab: "session",
 };

@@ -10,11 +10,21 @@
  * 4. **Suivi**             (`Dashboard` à deux onglets + `TeacherMenu`)
  *
  * ────────────────────────────────────────────────────────────────
+ * Accès à la gestion des élèves
+ * ────────────────────────────────────────────────────────────────
+ * `handleManageRoster` ouvre le Dashboard directement sur l'onglet
+ * "Classe" via la prop `defaultTab`. Il est appelé :
+ * - depuis `StudentSelectScreen` (bouton "⚙ Gérer les élèves")
+ * - depuis `TeacherMenu` → Dashboard → onglet Classe (chemin existant)
+ *
+ * Le Dashboard est désormais accessible même si `startTs` est null
+ * (avant toute session élève). L'onglet Session est alors masqué.
+ *
+ * ────────────────────────────────────────────────────────────────
  * Ouverture directe via URL
  * ────────────────────────────────────────────────────────────────
- * `?atelier=tg|dq|cu` bypasse SetupScreen et ouvre StudentSelectScreen
- * directement. `TeacherMenu → Changer d'atelier` met à jour l'URL
- * via history.replaceState.
+ * `?atelier=tg|dq|cu` bypasse SetupScreen et ouvre StudentSelectScreen.
+ * `TeacherMenu → Changer d'atelier` met à jour l'URL via replaceState.
  *
  * ────────────────────────────────────────────────────────────────
  * Persistance des traces
@@ -22,13 +32,6 @@
  * Un useEffect sur `events` détecte SIT_DONE et ATELIER_DONE pour
  * persister incrémentalement via useStudentTraces, sans modifier
  * les ateliers eux-mêmes.
- *
- * ────────────────────────────────────────────────────────────────
- * Refresh de page
- * ────────────────────────────────────────────────────────────────
- * L'atelier est restauré depuis l'URL. L'élève actif n'est PAS
- * restauré — StudentSelectScreen s'affiche à nouveau (comportement
- * intentionnel en contexte classe).
  *
  * @module App
  */
@@ -124,6 +127,13 @@ export default function App() {
     const [showMenu, setShowMenu] = useState(false);
     const [showDash, setShowDash] = useState(false);
 
+    /**
+     * Onglet cible à l'ouverture du Dashboard.
+     * "session" par défaut, "classe" quand déclenché depuis StudentSelectScreen.
+     * @type {'session'|'classe'}
+     */
+    const [dashDefaultTab, setDashDefaultTab] = useState("session");
+
     /** Élève actif en session. null = StudentSelectScreen affiché. */
     const [activeStudent, setActiveStudent] = useState(null);
     const [showStudentSelect, setShowStudentSelect] = useState(!!urlAtelier);
@@ -134,10 +144,7 @@ export default function App() {
     const [startTs, setStartTs] = useState(null);
     const holdRef = useRef(null);
 
-    // Roster — CRUD complet (addStudent / removeStudent transmis au Dashboard)
     const { students, addStudent, removeStudent } = useRoster();
-
-    // Traces — opérations de session + API de réinitialisation complète
     const {
         traces,
         openSession,
@@ -198,6 +205,18 @@ export default function App() {
         resetLog();
     }, [resetLog]);
 
+    // ── Gestion du registre — accès direct depuis StudentSelectScreen ────────────
+
+    /**
+     * Ouvre le Dashboard sur l'onglet "Classe".
+     * Accessible avant toute session (startTs peut être null).
+     */
+    const handleManageRoster = useCallback(() => {
+        setDashDefaultTab("classe");
+        setShowDash(true);
+        setShowMenu(false);
+    }, []);
+
     // ── Appui long — accès menu enseignant·e ────────────────────────────────────
 
     const startHold = useCallback(() => {
@@ -209,6 +228,7 @@ export default function App() {
     // ── Handlers TeacherMenu ────────────────────────────────────────────────────
 
     const handleOpenDash = useCallback(() => {
+        setDashDefaultTab("session");
         setShowDash(true);
         setShowMenu(false);
     }, []);
@@ -223,6 +243,14 @@ export default function App() {
     }, [resetLog]);
 
     const handleCloseMenu = useCallback(() => setShowMenu(false), []);
+
+    // ── Fermeture du Dashboard ──────────────────────────────────────────────────
+
+    const handleCloseDash = useCallback(() => {
+        setShowDash(false);
+        // Réinitialise l'onglet par défaut pour la prochaine ouverture via TeacherMenu
+        setDashDefaultTab("session");
+    }, []);
 
     // ── Écran de sélection d'atelier ────────────────────────────────────────────
 
@@ -276,6 +304,7 @@ export default function App() {
                     students={students}
                     atelierMeta={m}
                     onSelect={handleSelectStudent}
+                    onManage={handleManageRoster}
                 />
             )}
 
@@ -289,13 +318,14 @@ export default function App() {
                 />
             )}
 
-            {/* Dashboard — deux onglets Session + Classe */}
-            {showDash && startTs && (
+            {/* Dashboard — startTs nullable, onglet ciblé via defaultTab */}
+            {showDash && (
                 <Dashboard
                     events={events}
                     atelierMeta={{ ...m, total: totalSits }}
                     startTs={startTs}
-                    onClose={() => setShowDash(false)}
+                    defaultTab={dashDefaultTab}
+                    onClose={handleCloseDash}
                     students={students}
                     traces={traces}
                     atelierID={atelier}
