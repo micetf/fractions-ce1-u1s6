@@ -5,6 +5,11 @@
  * Rend la Navbar en mode 'teacher' avec flèche retour vers TeacherHome.
  * Affiche résultats de la classe, resets, et bouton Lancer/Arrêter session.
  *
+ * ClassTracker et ses sous-composants (StudentRow, StudentDetail) utilisent
+ * des couleurs calibrées pour un fond sombre (héritage du Dashboard overlay).
+ * Ils sont donc enveloppés dans un panneau `bg-slate-800` pour conserver
+ * leur lisibilité sans modifier leurs styles internes.
+ *
  * @module teacher/TeacherAtelierView
  */
 
@@ -15,6 +20,9 @@ import Navbar from "../Navbar.jsx";
 
 // ─── Sous-composant : bandeau session active ────────────────────────────────────
 
+/**
+ * @param {{ atelierMeta: Object, onStop: Function }} props
+ */
 function SessionBanner({ atelierMeta, onStop }) {
     return (
         <div
@@ -94,7 +102,6 @@ export default function TeacherAtelierView({
 
     return (
         <>
-            {/* ── Navbar mode enseignant avec retour ── */}
             <Navbar mode="teacher" atelierMeta={atelierMeta} onBack={onBack} />
 
             <div
@@ -117,7 +124,7 @@ export default function TeacherAtelierView({
                                 className="w-full py-4 rounded-2xl text-center
                                             border-2 border-dashed border-slate-300"
                             >
-                                <p className="text-slate-400 font-bold text-sm">
+                                <p className="text-slate-500 font-bold text-sm">
                                     Une session est déjà active sur un autre
                                     atelier
                                 </p>
@@ -139,7 +146,11 @@ export default function TeacherAtelierView({
                             </button>
                         ))}
 
-                    {/* ── Résultats de la classe ── */}
+                    {/* ── Résultats de la classe ────────────────────────────────
+                        ClassTracker et ses enfants (StudentRow, StudentDetail)
+                        utilisent des couleurs pour fond sombre — héritage du
+                        Dashboard. On leur fournit ce fond via bg-slate-800.
+                    ── */}
                     <section>
                         <h2
                             className="text-xs font-bold uppercase tracking-widest
@@ -147,15 +158,18 @@ export default function TeacherAtelierView({
                         >
                             📊 Résultats de la classe
                         </h2>
-                        <ClassTracker
-                            students={students}
-                            traces={traces}
-                            atelierID={atelierID}
-                            atelierMeta={atelierMeta}
-                            resetStudent={resetStudent}
-                            resetStudentAll={resetStudentAll}
-                            resetAll={resetAll}
-                        />
+
+                        <div className="rounded-2xl overflow-hidden bg-slate-800 p-2">
+                            <ClassTracker
+                                students={students}
+                                traces={traces}
+                                atelierID={atelierID}
+                                atelierMeta={atelierMeta}
+                                resetStudent={resetStudent}
+                                resetStudentAll={resetStudentAll}
+                                resetAll={resetAll}
+                            />
+                        </div>
                     </section>
                 </div>
             </div>
