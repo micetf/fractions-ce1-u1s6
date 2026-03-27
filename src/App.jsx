@@ -39,6 +39,13 @@ import TeacherSpace from "./components/teacher/TeacherSpace.jsx";
 import StudentSpace from "./components/student/StudentSpace.jsx";
 import StorageToast from "./components/ui/StorageToast.jsx"; // ← AJOUT
 
+import {
+    STORAGE_KEYS,
+    readSession,
+    writeSession,
+    removeSession,
+} from "./utils/storage.js";
+
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
 const LONG_PRESS_DELAY = 2000;
@@ -46,8 +53,27 @@ const VALID_ATELIERS = ["tg", "dq", "cu"];
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Lit le paramètre `?atelier=` dans l'URL.
+ * Sert uniquement à orienter l'enseignant vers la bonne vue au premier accès.
+ * Ne constitue PAS une session active.
+ *
+ * @returns {string|null}
+ */
 function readUrlAtelier() {
     const p = new URLSearchParams(window.location.search).get("atelier");
+    return VALID_ATELIERS.includes(p) ? p : null;
+}
+
+/**
+ * Lit l'atelier de session depuis sessionStorage.
+ * Écrit uniquement par handleLaunchSession, effacé par handleStopSession.
+ * Survit au refresh de la page — effacé à la fermeture de l'onglet.
+ *
+ * @returns {string|null}
+ */
+function readSessionAtelier() {
+    const p = readSession(STORAGE_KEYS.SESSION, null);
     return VALID_ATELIERS.includes(p) ? p : null;
 }
 
@@ -102,24 +128,25 @@ export default function App() {
     // ── État enseignant ───────────────────────────────────────────────────────
     const [teacherView, setTeacherView] = useState("home"); // 'home' | atelierID
 
-    // ── État session ──────────────────────────────────────────────────────────────
+    // ── État session ───────────────────────────────────────────────────────────────
 
     /**
-     * Atelier pré-chargé depuis le paramètre URL au démarrage.
-     * Sert uniquement à orienter l'enseignant vers la bonne vue atelier.
-     * Ne constitue PAS une session active — les élèves ne peuvent pas rejoindre.
+     * Atelier pré-chargé depuis l'URL au démarrage.
+     * Lecture seule — oriente l'enseignant vers la bonne vue atelier à l'entrée.
+     * N'autorise PAS les élèves à rejoindre une session.
      *
      * @type {string|null}
      */
-    const [preloadedAtelier] = useState(readUrlAtelier); // lecture seule
+    const [preloadedAtelier] = useState(readUrlAtelier);
 
     /**
      * Atelier ouvert aux élèves — null = pas de session active.
+     * Initialisé depuis sessionStorage pour survivre aux refreshs de page.
      * Mis à jour UNIQUEMENT par handleLaunchSession / handleStopSession.
      *
      * @type {string|null}
      */
-    const [launchedAtelier, setLaunchedAtelier] = useState(null); // toujours null au boot
+    const [launchedAtelier, setLaunchedAtelier] = useState(readSessionAtelier);
 
     // ── État élève ────────────────────────────────────────────────────────────
     const [activeStudent, setActiveStudent] = useState(null);
@@ -193,14 +220,14 @@ export default function App() {
 
     // ── Handlers : mode enseignant ────────────────────────────────────────────
 
-    /** Depuis VisitorScreen ou depuis la confirmation long press. */
+    /** L'enseignant entre dans son espace. */
     const handleEnterTeacher = useCallback(() => {
         setShowTeacherConfirm(false);
         if (mode === "student" && launchedAtelier) {
             // Retour depuis une session en cours → vue de cet atelier
             setTeacherView(launchedAtelier);
         } else if (preloadedAtelier) {
-            // Tablette pré-configurée via URL → atterrissage direct sur l'atelier
+            // Tablette pré-configurée via URL → atterrissage direct
             setTeacherView(preloadedAtelier);
         } else {
             setTeacherView("home");
@@ -208,14 +235,10 @@ export default function App() {
         setMode("teacher");
     }, [mode, launchedAtelier, preloadedAtelier]);
 
-    /** L'enseignant quitte son espace → retour visiteur. */
-    const handleExitTeacher = useCallback(() => {
-        setMode("visitor");
-    }, []);
-
     /** L'enseignant lance une session dans un atelier. */
     const handleLaunchSession = useCallback(
         (atelierID) => {
+            writeSession(STORAGE_KEYS.SESSION, atelierID); // ← persiste dans l'onglet
             setLaunchedAtelier(atelierID);
             setActiveStudent(null);
             setStartTs(null);
@@ -229,6 +252,7 @@ export default function App() {
 
     /** L'enseignant arrête la session en cours. */
     const handleStopSession = useCallback(() => {
+        removeSession(STORAGE_KEYS.SESSION); // ← efface la persistance
         setLaunchedAtelier(null);
         setActiveStudent(null);
         setStartTs(null);
@@ -238,6 +262,11 @@ export default function App() {
         setTeacherView("home");
         setMode("teacher");
     }, [resetLog]);
+
+    /** L'enseignant quitte son espace → retour visiteur. */
+    const handleExitTeacher = useCallback(() => {
+        setMode("visitor");
+    }, []);
 
     // ── Handlers : mode élève ─────────────────────────────────────────────────
 
