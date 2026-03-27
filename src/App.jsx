@@ -102,9 +102,24 @@ export default function App() {
     // ── État enseignant ───────────────────────────────────────────────────────
     const [teacherView, setTeacherView] = useState("home"); // 'home' | atelierID
 
-    // ── État session ──────────────────────────────────────────────────────────
-    /** Atelier ouvert aux élèves — null = pas de session active */
-    const [launchedAtelier, setLaunchedAtelier] = useState(readUrlAtelier);
+    // ── État session ──────────────────────────────────────────────────────────────
+
+    /**
+     * Atelier pré-chargé depuis le paramètre URL au démarrage.
+     * Sert uniquement à orienter l'enseignant vers la bonne vue atelier.
+     * Ne constitue PAS une session active — les élèves ne peuvent pas rejoindre.
+     *
+     * @type {string|null}
+     */
+    const [preloadedAtelier] = useState(readUrlAtelier); // lecture seule
+
+    /**
+     * Atelier ouvert aux élèves — null = pas de session active.
+     * Mis à jour UNIQUEMENT par handleLaunchSession / handleStopSession.
+     *
+     * @type {string|null}
+     */
+    const [launchedAtelier, setLaunchedAtelier] = useState(null); // toujours null au boot
 
     // ── État élève ────────────────────────────────────────────────────────────
     const [activeStudent, setActiveStudent] = useState(null);
@@ -181,14 +196,17 @@ export default function App() {
     /** Depuis VisitorScreen ou depuis la confirmation long press. */
     const handleEnterTeacher = useCallback(() => {
         setShowTeacherConfirm(false);
-        // Depuis le mode élève : pointe sur l'atelier en cours
         if (mode === "student" && launchedAtelier) {
+            // Retour depuis une session en cours → vue de cet atelier
             setTeacherView(launchedAtelier);
+        } else if (preloadedAtelier) {
+            // Tablette pré-configurée via URL → atterrissage direct sur l'atelier
+            setTeacherView(preloadedAtelier);
         } else {
             setTeacherView("home");
         }
         setMode("teacher");
-    }, [mode, launchedAtelier]);
+    }, [mode, launchedAtelier, preloadedAtelier]);
 
     /** L'enseignant quitte son espace → retour visiteur. */
     const handleExitTeacher = useCallback(() => {
