@@ -2,28 +2,27 @@
  * @file App.jsx — composant racine de l'application Fractions CE1.
  *
  * @description
- * Machine à états à trois modes exclusifs :
+ * Machine à états fondée sur deux dimensions orthogonales :
  *
- * ┌──────────┐  confirmation  ┌─────────┐
- * │ VISITOR  │ ─────────────► │ TEACHER │
- * │          │ ◄───── exit ── │         │
- * │          │                └─────────┘
- * │          │  session       ┌─────────┐
- * │          │  active        │ STUDENT │
- * └──────────┘ ─────────────► │         │
- *                    ▲        │ long    │
- *                    │        │ press   │
- *                    │        │ (2s)    │
- *                    │        │  ↓      │
- *                    │        │ confirm │
- *                    └────────┤ overlay │
- *                             └─────────┘
+ * 1. `teacherAuthed` (boolean, React uniquement)
+ *    - false au démarrage et après tout rechargement de page
+ *    - true uniquement après long press validé dans AppGate ou depuis StudentSpace
  *
- * Le long press depuis le mode élève affiche `TeacherConfirmOverlay`
- * avant de basculer — même friction que l'entrée depuis VisitorScreen.
+ * 2. `session.active` (boolean, localStorage)
+ *    - false → AppGate (enseignant doit lancer une session)
+ *    - true  → StudentSpace (élève peut rejoindre ou reprendre)
  *
- * `StorageToast` est rendu à la racine (hors des trois branches de mode)
- * via un fragment, garantissant sa présence quel que soit le mode actif.
+ * Logique de routage :
+ *
+ *   teacherAuthed === true          →  TeacherSpace (toutes les vues enseignant)
+ *   teacherAuthed === false
+ *     session.active === true       →  StudentSpace (sélection + activité)
+ *     session.active === false      →  AppGate (attente + long press discret)
+ *
+ * Déviations assumées par rapport aux specs :
+ * - `activeStudentId` est persisté dans localStorage (SESSION) pour permettre
+ *   la reprise après rechargement. Les specs prévoient React only.
+ * - `startTs` est également persisté pour cohérence des durées.
  *
  * @module App
  */
@@ -33,48 +32,37 @@ import { useEventLog } from "./hooks/useEventLog.js";
 import { useRoster } from "./hooks/useRoster.js";
 import { useStudentTraces } from "./hooks/useStudentTraces.js";
 import { ATELIERS } from "./data/ateliers.js";
-
-import VisitorScreen from "./components/VisitorScreen.jsx";
-import TeacherSpace from "./components/teacher/TeacherSpace.jsx";
-import StudentSpace from "./components/student/StudentSpace.jsx";
-import StorageToast from "./components/ui/StorageToast.jsx"; // ← AJOUT
-
 import {
     STORAGE_KEYS,
-    readSession,
-    writeSession,
-    removeSession,
+    readStorage,
+    readActiveSession,
+    writeActiveSession,
+    clearSession,
 } from "./utils/storage.js";
+
+import AppGate from "./components/AppGate.jsx";
+import TeacherSpace from "./components/teacher/TeacherSpace.jsx";
+import StudentSpace from "./components/student/StudentSpace.jsx";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
-const LONG_PRESS_DELAY = 2000;
-const VALID_ATELIERS = ["tg", "dq", "cu"];
+/** Durée de l'appui long pour revenir à l'espace enseignant depuis StudentSpace (ms). */
+const LONG_PRESS_DELAY = 1500;
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Lit le paramètre `?atelier=` dans l'URL.
- * Sert uniquement à orienter l'enseignant vers la bonne vue au premier accès.
- * Ne constitue PAS une session active.
- *
- * @returns {string|null}
- */
-function readUrlAtelier() {
-    const p = new URLSearchParams(window.location.search).get("atelier");
-    return VALID_ATELIERS.includes(p) ? p : null;
-}
+// ─── Helpers d'initialisation ─────────────────────────────────────────────────
 
 /**
- * Lit l'atelier de session depuis sessionStorage.
- * Écrit uniquement par handleLaunchSession, effacé par handleStopSession.
- * Survit au refresh de la page — effacé à la fermeture de l'onglet.
+ * Réhydrate l'élève actif depuis la session persistée et le roster.
+ * Retourne null si la session est inactive, si aucun élève n'est sélectionné,
+ * ou si l'élève n'existe plus dans le roster (suppression entre deux séances).
  *
- * @returns {string|null}
+ * @returns {{ id: string, pseudo: string }|null}
  */
-function readSessionAtelier() {
-    const p = readSession(STORAGE_KEYS.SESSION, null);
-    return VALID_ATELIERS.includes(p) ? p : null;
+function rehydrateActiveStudent() {
+    const sess = readActiveSession();
+    if (!sess.active || !sess.activeStudentId) return null;
+    const roster = readStorage(STORAGE_KEYS.ROSTER, []);
+    return roster.find((s) => s.id === sess.activeStudentId) ?? null;
 }
 
 /**
@@ -122,50 +110,27 @@ function buildSnapshot(events, sitDoneData) {
 // ─── Composant ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-    // ── Machine à états ───────────────────────────────────────────────────────
-    const [mode, setMode] = useState("visitor"); // 'visitor' | 'teacher' | 'student'
+    // ── Authentification enseignant (React only — révoquée au rechargement) ───────
+    const [teacherAuthed, setTeacherAuthed] = useState(false);
+    const [teacherView, setTeacherView] = useState("home");
 
-    // ── État enseignant ───────────────────────────────────────────────────────
-    const [teacherView, setTeacherView] = useState("home"); // 'home' | atelierID
+    // ── Session (initialisée depuis localStorage) ─────────────────────────────────
+    const [launchedAtelier, setLaunchedAtelier] = useState(
+        () => readActiveSession().atelierID
+    );
 
-    // ── État session ───────────────────────────────────────────────────────────────
+    // ── Élève courant (réhydraté depuis localStorage + roster) ───────────────────
+    const [activeStudent, setActiveStudent] = useState(rehydrateActiveStudent);
+    const [startTs, setStartTs] = useState(
+        () => readActiveSession().startTs ?? null
+    );
 
-    /**
-     * Atelier pré-chargé depuis l'URL au démarrage.
-     * Lecture seule — oriente l'enseignant vers la bonne vue atelier à l'entrée.
-     * N'autorise PAS les élèves à rejoindre une session.
-     *
-     * @type {string|null}
-     */
-    const [preloadedAtelier] = useState(readUrlAtelier);
-
-    /**
-     * Atelier ouvert aux élèves — null = pas de session active.
-     * Initialisé depuis sessionStorage pour survivre aux refreshs de page.
-     * Mis à jour UNIQUEMENT par handleLaunchSession / handleStopSession.
-     *
-     * @type {string|null}
-     */
-    const [launchedAtelier, setLaunchedAtelier] = useState(readSessionAtelier);
-
-    // ── État élève ────────────────────────────────────────────────────────────
-    const [activeStudent, setActiveStudent] = useState(null);
-    const [startTs, setStartTs] = useState(null);
-
-    // ── Confirmation retour enseignant (long press depuis mode élève) ─────────
+    // ── Confirmation retour enseignant (long press depuis StudentSpace) ───────────
     const [showTeacherConfirm, setShowTeacherConfirm] = useState(false);
 
-    // ── Hooks de données ──────────────────────────────────────────────────────
+    // ── Hooks de données ──────────────────────────────────────────────────────────
     const { events, log, resetLog } = useEventLog();
-
-    const {
-        students,
-        addStudent,
-        removeStudent,
-        storageError: rosterStorageError, // ← AJOUT
-        clearStorageError: clearRosterError, // ← AJOUT
-    } = useRoster();
-
+    const { students, addStudent, removeStudent } = useRoster();
     const {
         traces,
         openSession,
@@ -174,24 +139,12 @@ export default function App() {
         resetStudent,
         resetStudentAll,
         resetAll,
-        storageError: tracesStorageError, // ← AJOUT
-        clearStorageError: clearTracesError, // ← AJOUT
     } = useStudentTraces();
 
-    // ── Erreur de stockage combinée ── ← AJOUT ────────────────────────────────
-    const storageError = rosterStorageError || tracesStorageError;
-
-    const handleDismissStorageError = useCallback(() => {
-        // ← AJOUT
-        clearRosterError();
-        clearTracesError();
-    }, [clearRosterError, clearTracesError]);
-
-    // ── Refs ──────────────────────────────────────────────────────────────────
     const processedCountRef = useRef(0);
     const holdRef = useRef(null);
 
-    // ── Persistance incrémentale ──────────────────────────────────────────────
+    // ── Persistance incrémentale des traces ───────────────────────────────────────
     useEffect(() => {
         if (events.length === 0) {
             processedCountRef.current = 0;
@@ -218,65 +171,78 @@ export default function App() {
         markCompleted,
     ]);
 
-    // ── Handlers : mode enseignant ────────────────────────────────────────────
+    // ── Handlers : accès enseignant ───────────────────────────────────────────────
 
-    /** L'enseignant entre dans son espace. */
+    /**
+     * Long press validé (depuis AppGate ou StudentSpace).
+     * `teacherAuthed` passe à true — jamais écrit dans localStorage.
+     */
     const handleEnterTeacher = useCallback(() => {
         setShowTeacherConfirm(false);
-        if (mode === "student" && launchedAtelier) {
-            // Retour depuis une session en cours → vue de cet atelier
-            setTeacherView(launchedAtelier);
-        } else if (preloadedAtelier) {
-            // Tablette pré-configurée via URL → atterrissage direct
-            setTeacherView(preloadedAtelier);
-        } else {
-            setTeacherView("home");
-        }
-        setMode("teacher");
-    }, [mode, launchedAtelier, preloadedAtelier]);
+        // Depuis une session active → atterrir sur la vue de cet atelier
+        setTeacherView(launchedAtelier ?? "home");
+        setTeacherAuthed(true);
+    }, [launchedAtelier]);
 
-    /** L'enseignant lance une session dans un atelier. */
+    /** Quitter l'espace enseignant → retour vers la vue courante (AppGate ou StudentSpace). */
+    const handleExitTeacher = useCallback(() => {
+        setTeacherAuthed(false);
+    }, []);
+
+    // ── Handlers : cycle de session ───────────────────────────────────────────────
+
+    /**
+     * L'enseignant lance une session sur un atelier.
+     * Écrit dans localStorage — survit au rechargement.
+     */
     const handleLaunchSession = useCallback(
         (atelierID) => {
-            writeSession(STORAGE_KEYS.SESSION, atelierID); // ← persiste dans l'onglet
+            writeActiveSession({
+                active: true,
+                atelierID,
+                activeStudentId: null,
+                startTs: null,
+            });
             setLaunchedAtelier(atelierID);
             setActiveStudent(null);
             setStartTs(null);
             resetLog();
             processedCountRef.current = 0;
-            history.replaceState(null, "", `?atelier=${atelierID}`);
-            setMode("student");
+            setTeacherAuthed(false); // bascule vers StudentSpace
         },
         [resetLog]
     );
 
-    /** L'enseignant arrête la session en cours. */
+    /**
+     * L'enseignant arrête la session en cours.
+     * Efface complètement la session dans localStorage.
+     */
     const handleStopSession = useCallback(() => {
-        removeSession(STORAGE_KEYS.SESSION); // ← efface la persistance
+        clearSession();
         setLaunchedAtelier(null);
         setActiveStudent(null);
         setStartTs(null);
         resetLog();
         processedCountRef.current = 0;
-        history.replaceState(null, "", window.location.pathname);
         setTeacherView("home");
-        setMode("teacher");
+        setTeacherAuthed(true); // reste dans l'espace enseignant
     }, [resetLog]);
 
-    /** L'enseignant quitte son espace → retour visiteur. */
-    const handleExitTeacher = useCallback(() => {
-        setMode("visitor");
-    }, []);
+    // ── Handlers : élève ──────────────────────────────────────────────────────────
 
-    // ── Handlers : mode élève ─────────────────────────────────────────────────
-
-    /** L'élève choisit son prénom. */
+    /**
+     * L'élève sélectionne son prénom.
+     * Persiste `activeStudentId` et `startTs` dans localStorage.
+     * (déviation assumée des specs)
+     */
     const handleSelectStudent = useCallback(
         (student) => {
+            const ts = Date.now();
             resetLog();
             processedCountRef.current = 0;
-            setStartTs(Date.now());
             openSession(launchedAtelier, student.id);
+            writeActiveSession({ activeStudentId: student.id, startTs: ts });
+            setStartTs(ts);
             setActiveStudent(student);
         },
         [launchedAtelier, openSession, resetLog]
@@ -284,16 +250,17 @@ export default function App() {
 
     /**
      * L'élève passe la tablette → retour à StudentSelectScreen.
-     * La session reste ouverte sur le même atelier.
+     * La session reste active — efface uniquement l'élève courant.
      */
     const handleNextStudent = useCallback(() => {
+        writeActiveSession({ activeStudentId: null, startTs: null });
         setActiveStudent(null);
         setStartTs(null);
         resetLog();
         processedCountRef.current = 0;
     }, [resetLog]);
 
-    // ── Long press : mode élève → confirmation retour enseignant ─────────────
+    // ── Long press depuis StudentSpace → confirmation retour enseignant ───────────
 
     const handleLongPressStart = useCallback(() => {
         holdRef.current = setTimeout(() => {
@@ -309,15 +276,11 @@ export default function App() {
         setShowTeacherConfirm(false);
     }, []);
 
-    // ── Rendu ─────────────────────────────────────────────────────────────────
-    const atelierMeta = launchedAtelier ? ATELIERS[launchedAtelier] : null;
+    // ── Routage ───────────────────────────────────────────────────────────────────
 
-    // Contenu principal selon le mode — extrait en variable pour permettre
-    // au fragment racine d'accueillir StorageToast dans tous les modes.  // ← AJOUT
-    let content;
-
-    if (mode === "teacher") {
-        content = (
+    // 1. Enseignant authentifié → TeacherSpace (toutes les vues)
+    if (teacherAuthed) {
+        return (
             <TeacherSpace
                 teacherView={teacherView}
                 setTeacherView={setTeacherView}
@@ -334,8 +297,13 @@ export default function App() {
                 onExit={handleExitTeacher}
             />
         );
-    } else if (mode === "student") {
-        content = (
+    }
+
+    const atelierMeta = launchedAtelier ? ATELIERS[launchedAtelier] : null;
+
+    // 2. Session active → StudentSpace
+    if (launchedAtelier) {
+        return (
             <StudentSpace
                 atelierMeta={atelierMeta}
                 students={students}
@@ -354,26 +322,8 @@ export default function App() {
                 onCancelTeacherConfirm={handleCancelTeacherConfirm}
             />
         );
-    } else {
-        content = (
-            <VisitorScreen
-                launchedAtelier={launchedAtelier}
-                atelierMeta={atelierMeta}
-                students={students}
-                onEnterTeacher={handleEnterTeacher}
-                onEnterStudent={() => setMode("student")}
-            />
-        );
     }
 
-    // Fragment racine : StorageToast persiste quel que soit le mode actif. // ← AJOUT
-    return (
-        <>
-            {content}
-            <StorageToast
-                visible={storageError}
-                onDismiss={handleDismissStorageError}
-            />
-        </>
-    );
+    // 3. Pas de session → AppGate (long press discret pour l'enseignant)
+    return <AppGate onEnterTeacher={handleEnterTeacher} />;
 }

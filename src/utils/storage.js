@@ -6,12 +6,12 @@
  * toute duplication entre les hooks. Le préfixe `fce1u1s6_` garantit
  * l'absence de collision avec d'autres applications sur le même domaine.
  *
- * Deux backends :
- * - `localStorage`   — données persistantes (roster, traces)
- * - `sessionStorage` — données volatiles liées à l'onglet (session active)
+ * Tout le stockage repose sur `localStorage` (pas de sessionStorage) :
+ * - roster et traces  → persistance longue durée
+ * - session active    → survit au rechargement ET à la fermeture de l'onglet
  *
- * Pattern lecture-avant-écriture : chaque `write` relit d'abord la clé
- * pour merger les données (sécurité multi-onglets).
+ * L'accès enseignant (`teacherAuthed`) n'est jamais écrit ici : il reste
+ * en état React uniquement et est révoqué à chaque rechargement.
  *
  * @module storage
  */
@@ -19,22 +19,44 @@
 // ─── Clés ──────────────────────────────────────────────────────────────────────
 
 /**
- * Clés de stockage de l'application.
- *
- * - `ROSTER`  → localStorage  (@see useRoster)
- * - `TRACES`  → localStorage  (@see useStudentTraces)
- * - `SESSION` → sessionStorage — atelier lancé par l'enseignant.
- *               Survivant au refresh de la page, effacé à la fermeture de l'onglet.
+ * Clés de stockage localStorage de l'application.
  *
  * @enum {string}
  */
 export const STORAGE_KEYS = {
+    /** Liste des élèves de la classe. @see useRoster */
     ROSTER: "fce1u1s6_roster",
+    /** Traces de parcours par atelier et par élève. @see useStudentTraces */
     TRACES: "fce1u1s6_traces",
+    /**
+     * Session active lancée par l'enseignant.
+     * Structure : {@link ActiveSession}
+     * Persiste à la fermeture de l'onglet — effacé uniquement par handleStopSession.
+     */
     SESSION: "fce1u1s6_session",
 };
 
-// ─── Helpers localStorage ──────────────────────────────────────────────────────
+// ─── Typedef ───────────────────────────────────────────────────────────────────
+
+/**
+ * @typedef {Object} ActiveSession
+ * @property {boolean}     active          - Session ouverte aux élèves
+ * @property {string|null} atelierID       - Identifiant de l'atelier en cours
+ * @property {string|null} activeStudentId - ID de l'élève courant
+ *                                           (déviation assumée des specs : persisté
+ *                                           pour permettre la reprise après reload)
+ * @property {number|null} startTs         - Timestamp de début de session élève (ms)
+ */
+
+/** @type {ActiveSession} */
+const SESSION_DEFAULT = {
+    active: false,
+    atelierID: null,
+    activeStudentId: null,
+    startTs: null,
+};
+
+// ─── Helpers génériques localStorage ──────────────────────────────────────────
 
 /**
  * Lit et désérialise une valeur depuis localStorage.
@@ -55,6 +77,7 @@ export function readStorage(key, defaultValue) {
 
 /**
  * Sérialise et écrit une valeur dans localStorage.
+ * Silencieux en cas d'erreur (quota dépassé, navigation privée).
  *
  * @param {string}  key   - Clé localStorage
  * @param {unknown} value - Valeur JSON-sérialisable
@@ -82,50 +105,40 @@ export function removeStorage(key) {
     }
 }
 
-// ─── Helpers sessionStorage ────────────────────────────────────────────────────
+// ─── Helpers sémantiques SESSION ───────────────────────────────────────────────
 
 /**
- * Lit et désérialise une valeur depuis sessionStorage.
+ * Lit la session active depuis localStorage.
+ * Fusionne avec `SESSION_DEFAULT` pour garantir la présence de tous les champs
+ * même si la structure stockée est incomplète (migration de schéma).
  *
- * @template T
- * @param {string} key          - Clé sessionStorage
- * @param {T}      defaultValue - Valeur renvoyée si absente ou corrompue
- * @returns {T}
+ * @returns {ActiveSession}
  */
-export function readSession(key, defaultValue) {
-    try {
-        const raw = sessionStorage.getItem(key);
-        return raw !== null ? JSON.parse(raw) : defaultValue;
-    } catch {
-        return defaultValue;
-    }
+export function readActiveSession() {
+    return {
+        ...SESSION_DEFAULT,
+        ...readStorage(STORAGE_KEYS.SESSION, SESSION_DEFAULT),
+    };
 }
 
 /**
- * Sérialise et écrit une valeur dans sessionStorage.
+ * Applique un patch partiel sur la session active et persiste le résultat.
+ * Pattern read-before-write : relit localStorage pour éviter les collisions.
  *
- * @param {string}  key   - Clé sessionStorage
- * @param {unknown} value - Valeur JSON-sérialisable
- * @returns {boolean} `true` si l'écriture a réussi
+ * @param {Partial<ActiveSession>} patch
+ * @returns {boolean}
  */
-export function writeSession(key, value) {
-    try {
-        sessionStorage.setItem(key, JSON.stringify(value));
-        return true;
-    } catch {
-        return false;
-    }
+export function writeActiveSession(patch) {
+    const current = readActiveSession();
+    return writeStorage(STORAGE_KEYS.SESSION, { ...current, ...patch });
 }
 
 /**
- * Supprime une clé de sessionStorage.
+ * Réinitialise complètement la session active.
+ * Appelé par handleStopSession uniquement.
  *
- * @param {string} key
+ * @returns {boolean}
  */
-export function removeSession(key) {
-    try {
-        sessionStorage.removeItem(key);
-    } catch {
-        // silencieux
-    }
+export function clearSession() {
+    return writeStorage(STORAGE_KEYS.SESSION, SESSION_DEFAULT);
 }
